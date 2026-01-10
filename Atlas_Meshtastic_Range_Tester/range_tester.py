@@ -78,8 +78,23 @@ class RangeTester:
         )
         self.logger = logging.getLogger("RangeTester")
 
+    def flash_startup(self):
+        """Flash LEDs on startup to indicate boot."""
+        self.logger.info("Flashing LEDs for startup...")
+        for _ in range(3):
+            self.green_led.on()
+            self.red_led.on()
+            time.sleep(0.2)
+            self.green_led.off()
+            self.red_led.off()
+            time.sleep(0.2)
+
     def start(self):
         self.logger.info("Starting Range Tester...")
+        
+        # Flash LEDs on startup
+        self.flash_startup()
+        
         self.comms.start()
         
         # Give it a second to initialize the bridge
