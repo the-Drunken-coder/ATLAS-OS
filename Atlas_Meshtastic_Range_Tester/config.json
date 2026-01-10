@@ -2,8 +2,8 @@
     "radio_port": null,
     "gateway_node_id": "!db583ef4",
     "ping_interval": 10,
-    "green_led_pin": 17,
-    "red_led_pin": 27,
+    "green_led_pin": 27,
+    "red_led_pin": 17,
     "log_level": "INFO",
     "simulated": false
 }
