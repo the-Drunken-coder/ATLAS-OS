@@ -29,17 +29,20 @@ except (ImportError, Exception):
     class LED:
         def __init__(self, pin):
             self.pin = pin
-            self.is_active = False
+            self.value = 0
             logging.info(f"[MOCK] Initialized LED on pin {pin}")
+        @property
+        def is_lit(self):
+            return self.value == 1
         def on(self):
-            self.is_active = True
+            self.value = 1
             logging.info(f"[MOCK] LED on pin {self.pin} is ON")
         def off(self):
-            self.is_active = False
+            self.value = 0
             logging.info(f"[MOCK] LED on pin {self.pin} is OFF")
         def toggle(self):
-            self.is_active = not self.is_active
-            logging.info(f"[MOCK] LED on pin {self.pin} is {'ON' if self.is_active else 'OFF'}")
+            self.value = 1 - self.value
+            logging.info(f"[MOCK] LED on pin {self.pin} is {'ON' if self.is_lit else 'OFF'}")
 
 # --- Comms Manager ---
 from modules.comms.manager import CommsManager
@@ -147,10 +150,12 @@ class RangeTester:
                 self.logger.info("Gateway responded! Range is GOOD.")
                 self.green_led.on()
                 self.red_led.off()
+                self.logger.info(f"LED state: green={self.green_led.value}, red={self.red_led.value}")
             else:
                 self.logger.warning("Gateway timeout. Range is UNKNOWN/BAD.")
                 self.green_led.off()
                 self.red_led.on()
+                self.logger.info(f"LED state: green={self.green_led.value}, red={self.red_led.value}")
                 
         except Exception as e:
             self.logger.error(f"Error checking range: {e}")
