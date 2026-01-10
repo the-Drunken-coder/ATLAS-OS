@@ -110,9 +110,9 @@ class RangeTester:
 
         self.running = True
         
-        # Initial state: Red ON (waiting for first ping)
-        self.red_led.on()
-        self.green_led.off()
+        # Initial state: Green ON (waiting for first ping)
+        self.green_led.on()
+        self.red_led.off()
 
         try:
             while self.running:
@@ -131,8 +131,8 @@ class RangeTester:
     def check_range(self):
         if not self.comms.client:
             self.logger.warning("Comms client not ready")
-            self.red_led.on()
-            self.green_led.off()
+            self.green_led.on()
+            self.red_led.off()
             return
 
         self.logger.info(f"Pinging gateway: {self.config.get('gateway_node_id')}")
@@ -148,19 +148,19 @@ class RangeTester:
             # If result is not None, we assume it's a success (ACK received)
             if result:
                 self.logger.info("Gateway responded! Range is GOOD.")
-                self.green_led.on()
-                self.red_led.off()
-                self.logger.info(f"LED state: green={self.green_led.value}, red={self.red_led.value}")
+                self.red_led.on()
+                self.green_led.off()
+                self.logger.info(f"LED state: red={self.red_led.value}, green={self.green_led.value}")
             else:
                 self.logger.warning("Gateway timeout. Range is UNKNOWN/BAD.")
-                self.green_led.off()
-                self.red_led.on()
-                self.logger.info(f"LED state: green={self.green_led.value}, red={self.red_led.value}")
+                self.red_led.off()
+                self.green_led.on()
+                self.logger.info(f"LED state: red={self.red_led.value}, green={self.green_led.value}")
                 
         except Exception as e:
             self.logger.error(f"Error checking range: {e}")
-            self.green_led.off()
-            self.red_led.on()
+            self.red_led.off()
+            self.green_led.on()
 
 if __name__ == "__main__":
     tester = RangeTester(CURRENT_DIR / "config.json")
