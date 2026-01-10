@@ -1,4 +1,5 @@
 from .echo import echo as test_echo
+from .health_check import health_check
 from .list_entities import list_entities
 from .list_tasks import list_tasks
 from .get_entity import get_entity
@@ -35,6 +36,7 @@ from .get_full_dataset import get_full_dataset
 
 FUNCTION_REGISTRY = {
     "test_echo": test_echo,
+    "health_check": health_check,
     "list_entities": list_entities,
     "list_tasks": list_tasks,
     "get_entity": get_entity,
