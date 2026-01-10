@@ -52,9 +52,8 @@ class RangeTester:
         self.config = self._load_config(config_path)
         self.setup_logging()
         
-        # GPIO Setup
-        self.green_led = LED(self.config.get("green_led_pin", 17))
-        self.red_led = LED(self.config.get("red_led_pin", 27))
+        # GPIO Setup - single LED on pin 27 for range indication
+        self.led = LED(self.config.get("led_pin", 27))
         
         # Mock bus for CommsManager
         class MockBus:
@@ -82,14 +81,12 @@ class RangeTester:
         self.logger = logging.getLogger("RangeTester")
 
     def flash_startup(self):
-        """Flash LEDs on startup to indicate boot."""
-        self.logger.info("Flashing LEDs for startup...")
+        """Flash LED on startup to indicate boot."""
+        self.logger.info("Flashing LED for startup...")
         for _ in range(3):
-            self.green_led.on()
-            self.red_led.on()
+            self.led.on()
             time.sleep(0.2)
-            self.green_led.off()
-            self.red_led.off()
+            self.led.off()
             time.sleep(0.2)
 
     def start(self):
@@ -110,9 +107,8 @@ class RangeTester:
 
         self.running = True
         
-        # Initial state: Green ON (waiting for first ping)
-        self.green_led.on()
-        self.red_led.off()
+        # Initial state: LED OFF (waiting for first ping)
+        self.led.off()
 
         try:
             while self.running:
@@ -125,14 +121,12 @@ class RangeTester:
         self.logger.info("Stopping Range Tester...")
         self.running = False
         self.comms.stop()
-        self.green_led.off()
-        self.red_led.off()
+        self.led.off()
 
     def check_range(self):
         if not self.comms.client:
             self.logger.warning("Comms client not ready")
-            self.green_led.on()
-            self.red_led.off()
+            self.led.off()
             return
 
         self.logger.info(f"Pinging gateway: {self.config.get('gateway_node_id')}")
@@ -145,22 +139,17 @@ class RangeTester:
                 max_retries=1
             )
             
-            # If result is not None, we assume it's a success (ACK received)
+            # LED ON = good range, LED OFF = bad range
             if result:
                 self.logger.info("Gateway responded! Range is GOOD.")
-                self.red_led.on()
-                self.green_led.off()
-                self.logger.info(f"LED state: red={self.red_led.value}, green={self.green_led.value}")
+                self.led.on()
             else:
-                self.logger.warning("Gateway timeout. Range is UNKNOWN/BAD.")
-                self.red_led.off()
-                self.green_led.on()
-                self.logger.info(f"LED state: red={self.red_led.value}, green={self.green_led.value}")
+                self.logger.warning("Gateway timeout. Range is BAD.")
+                self.led.off()
                 
         except Exception as e:
             self.logger.error(f"Error checking range: {e}")
-            self.red_led.off()
-            self.green_led.on()
+            self.led.off()
 
 if __name__ == "__main__":
     tester = RangeTester(CURRENT_DIR / "config.json")
