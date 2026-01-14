@@ -1,9 +1,7 @@
 """Unit tests for module loader functionality."""
 
 import sys
-import json
 from pathlib import Path
-from tempfile import TemporaryDirectory
 
 import pytest
 
@@ -17,7 +15,7 @@ if _ASSET_OS_ROOT_STR not in sys.path:
     sys.path.insert(0, _ASSET_OS_ROOT_STR)
 
 from framework.bus import MessageBus  # noqa: E402
-from modules.module_loader import ModuleLoader, ModuleLoadError, DependencyError  # noqa: E402
+from modules.module_loader import ModuleLoader, DependencyError  # noqa: E402
 
 
 class TestModuleLoader:

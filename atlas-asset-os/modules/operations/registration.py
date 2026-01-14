@@ -1,7 +1,7 @@
 import logging
 import time
 import threading
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 LOGGER = logging.getLogger("modules.operations.registration")
 

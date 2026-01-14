@@ -5,7 +5,7 @@ All modules should inherit from ModuleBase and implement the required interface.
 
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 LOGGER = logging.getLogger("module_base")
 

@@ -1,8 +1,6 @@
 import logging
 import threading
-import queue
-import time
-from typing import Dict, List, Callable, Any, Optional
+from typing import Dict, List, Callable, Any
 
 LOGGER = logging.getLogger("bus")
 

@@ -32,7 +32,7 @@ try:
 except Exception:
     list_ports = None  # type: ignore
 
-from .functions import FUNCTION_REGISTRY
+from .functions import FUNCTION_REGISTRY  # noqa: E402
 
 LOGGER = logging.getLogger("modules.comms")
 
@@ -274,7 +274,6 @@ class CommsManager(ModuleBase):
         
         try:
             # Try to reinitialize the bridge
-            old_client = self.client
             self._init_bridge()
             
             # If we successfully reconnected

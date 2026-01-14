@@ -8,7 +8,7 @@ _FRAMEWORK_DIR = Path(__file__).resolve().parents[3] / "framework"
 if str(_FRAMEWORK_DIR) not in sys.path:
     sys.path.insert(0, str(_FRAMEWORK_DIR))
 
-from framework.bus import MessageBus
+from framework.bus import MessageBus  # noqa: E402
 
 def test_bus_initialization():
     """Verify bus initializes in a running state with no subscribers."""

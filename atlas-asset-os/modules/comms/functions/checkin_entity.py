@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from atlas_meshtastic_bridge.client import MeshtasticClient
 

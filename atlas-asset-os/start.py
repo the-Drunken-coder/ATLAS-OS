@@ -17,7 +17,7 @@ _SCRIPT_DIR = Path(__file__).resolve().parent
 if str(_SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPT_DIR))
 
-from framework.master import OSManager
+from framework.master import OSManager  # noqa: E402
 
 logging.basicConfig(
     level=logging.INFO,

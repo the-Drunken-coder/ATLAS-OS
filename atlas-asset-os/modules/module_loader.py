@@ -63,7 +63,7 @@ class ModuleLoader:
         Returns:
             Dict mapping module names to their manager classes
         """
-        discovered = {}
+        discovered: Dict[str, Type[ModuleBase]] = {}
         
         for modules_dir in self.modules_dirs:
             if not modules_dir.exists():

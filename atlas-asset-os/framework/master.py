@@ -1,6 +1,5 @@
 """BasePlate OS Master - Core OS manager for asset operating systems."""
 
-import signal
 import sys
 import time
 import json
@@ -79,11 +78,15 @@ class OSManager:
             # Try to find config.json relative to caller
             import inspect
             frame = inspect.currentframe()
-            try:
-                caller_file = Path(frame.f_back.f_back.f_globals.get("__file__", __file__))
-                config_path = caller_file.parent / "config.json"
-            except (AttributeError, KeyError):
-                config_path = Path.cwd() / "config.json"
+            # Default to current working directory
+            caller_dir = Path.cwd()
+            # Try to get caller's directory from frame
+            if frame and frame.f_back and frame.f_back.f_back:
+                back_globals = frame.f_back.f_back.f_globals
+                caller_file_str = back_globals.get("__file__")
+                if caller_file_str:
+                    caller_dir = Path(caller_file_str).parent
+            config_path = caller_dir / "config.json"
         
         if not config_path.exists():
             LOGGER.error("config.json not found at %s!", config_path)
@@ -110,7 +113,9 @@ class OSManager:
             LOGGER.info("Discovered %d module(s): %s", len(discovered), ", ".join(discovered.keys()))
             
             # Resolve dependencies and determine load order
-            load_order = self.module_loader.resolve_dependencies()
+            # Note: Return value not needed here as load order is stored internally
+            # and used by subsequent load_modules() and start_modules() calls
+            self.module_loader.resolve_dependencies()
             
             # Load and instantiate modules
             self.module_loader.load_modules()
