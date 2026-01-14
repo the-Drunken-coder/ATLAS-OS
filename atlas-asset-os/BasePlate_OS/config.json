@@ -1,0 +1,24 @@
+{
+    "atlas": {
+        "base_url": "http://localhost:8000",
+        "api_token": null,
+        "asset": {
+            "id": "new-asset-001",
+            "name": "New Gen Asset",
+            "model_id": "generic-asset"
+        }
+    },
+    "modules": {
+        "comms": {
+            "enabled": true,
+            "simulated": false,
+            "gateway_node_id": "!9e9f370c",
+            "radio_port": null,
+            "mode": "general",
+            "spool_path": "~/.baseplate_comm_spool.json"
+        },
+        "operations": {
+            "enabled": true
+        }
+    }
+}
