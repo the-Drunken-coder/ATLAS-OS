@@ -26,6 +26,20 @@ class MessageBus:
             self._subscribers[topic].append(handler)
             LOGGER.debug(f"Subscribed to '{topic}'")
 
+    def unsubscribe(self, topic: str, handler: Callable[[Any], None]) -> None:
+        """Unsubscribe a handler function from a specific topic."""
+        with self._lock:
+            if topic in self._subscribers:
+                try:
+                    self._subscribers[topic].remove(handler)
+                    LOGGER.debug(f"Unsubscribed from '{topic}'")
+                    # Clean up empty topic lists
+                    if not self._subscribers[topic]:
+                        del self._subscribers[topic]
+                except ValueError:
+                    # Handler not in list, ignore
+                    LOGGER.debug(f"Handler not subscribed to '{topic}', ignoring unsubscribe")
+
     def publish(self, topic: str, data: Any = None) -> None:
         """Publish data to a specific topic. Handlers are invoked immediately."""
         if not self._running:

@@ -108,6 +108,9 @@ class CommsManager:
 
         self.client: Optional[MeshtasticClient] = None
         self.functions: Dict[str, Callable[..., Any]] = {}
+        self.connected = False
+        self._reconnect_attempts = 0
+        self._max_reconnect_delay = 30.0
 
     def _init_bridge(self) -> None:
         # Load mode profile for reliability/transport defaults
@@ -153,6 +156,8 @@ class CommsManager:
         # Register callable functions for other modules (client injected)
         for name, func in FUNCTION_REGISTRY.items():
             self.functions[name] = lambda _f=func, **kwargs: _f(self.client, **kwargs)
+        self.connected = True
+        self._reconnect_attempts = 0
         LOGGER.info("Comms bridge initialized (simulated=%s, gateway=%s)", self.simulated, self.gateway_node_id)
 
     def start(self):
@@ -180,9 +185,100 @@ class CommsManager:
                 pass
 
     def _loop(self):
-        """Main comms loop placeholder."""
+        """Main comms loop - polls for incoming messages and handles reconnection."""
+        consecutive_errors = 0
+        max_consecutive_errors = 5
+        
         while self.running:
-            time.sleep(1)
+            if not self.client or not self.connected:
+                self._attempt_reconnection()
+                time.sleep(1)
+                continue
+            
+            try:
+                # Poll for incoming messages
+                sender, message = self.client.transport.receive_message(timeout=0.5)
+                
+                if message:
+                    consecutive_errors = 0
+                    # Publish received message to bus
+                    self.bus.publish(
+                        "comms.message_received",
+                        {
+                            "sender": sender,
+                            "message_id": message.id,
+                            "command": message.command,
+                            "type": message.type,
+                            "data": message.data or {},
+                            "correlation_id": message.correlation_id,
+                            "timestamp": time.time(),
+                        },
+                    )
+                    LOGGER.debug(
+                        "Received message: sender=%s, command=%s, type=%s",
+                        sender,
+                        message.command,
+                        message.type,
+                    )
+                else:
+                    # No message received, process outbox for pending sends
+                    if self.client and self.client.transport:
+                        try:
+                            self.client.transport.process_outbox()
+                        except Exception as exc:
+                            LOGGER.debug("Error processing outbox: %s", exc)
+                            
+            except Exception as exc:
+                consecutive_errors += 1
+                LOGGER.warning("Error receiving message (consecutive errors: %d): %s", consecutive_errors, exc)
+                
+                # If we hit too many consecutive errors, mark as disconnected
+                if consecutive_errors >= max_consecutive_errors:
+                    LOGGER.error("Too many consecutive errors, marking connection as lost")
+                    self._handle_disconnection()
+                    consecutive_errors = 0
+                else:
+                    time.sleep(0.1)  # Brief pause before retry
+    
+    def _handle_disconnection(self):
+        """Handle radio disconnection."""
+        if self.connected:
+            self.connected = False
+            self.bus.publish("comms.connection_lost", {"timestamp": time.time()})
+            LOGGER.warning("Radio connection lost")
+    
+    def _attempt_reconnection(self):
+        """Attempt to reconnect to the radio with exponential backoff."""
+        if not self.running:
+            return
+        
+        # Calculate exponential backoff delay (1s, 2s, 4s, 8s, ... up to max)
+        delay = min(2.0 ** self._reconnect_attempts, self._max_reconnect_delay)
+        
+        if self._reconnect_attempts == 0:
+            LOGGER.info("Attempting to reconnect radio...")
+        else:
+            LOGGER.info("Retrying radio reconnection (attempt %d, delay %.1fs)...", self._reconnect_attempts + 1, delay)
+            time.sleep(delay)
+        
+        try:
+            # Try to reinitialize the bridge
+            old_client = self.client
+            self._init_bridge()
+            
+            # If we successfully reconnected
+            if self.client and self.connected:
+                if self._reconnect_attempts > 0:
+                    LOGGER.info("Radio reconnection successful")
+                    self.bus.publish("comms.connection_restored", {"timestamp": time.time()})
+                self._reconnect_attempts = 0
+            else:
+                self._reconnect_attempts += 1
+                
+        except Exception as exc:
+            LOGGER.warning("Reconnection attempt failed: %s", exc)
+            self._reconnect_attempts += 1
+            self.connected = False
 
     def _handle_send_request(self, data):
         """Handle request to send message to outside world."""

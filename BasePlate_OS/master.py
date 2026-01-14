@@ -77,6 +77,18 @@ class OSManager:
         
         self._start_modules()
         
+        # Register asset with Atlas Command
+        try:
+            from modules.operations.registration import register_asset
+            LOGGER.info("Registering asset with Atlas Command...")
+            if register_asset(self.bus, self.config):
+                LOGGER.info("Asset registration completed successfully")
+            else:
+                LOGGER.warning("Asset registration failed, continuing boot sequence")
+        except Exception as e:
+            LOGGER.error(f"Error during asset registration: {e}")
+            LOGGER.warning("Continuing boot sequence despite registration failure")
+        
         self.bus.publish("os.boot_complete", {"ts": time.time()})
         LOGGER.info("Boot sequence complete. Entering main loop.")
 
