@@ -15,14 +15,10 @@ This catalog documents all modules available in the ATLAS Asset OS ecosystem, in
 - Message sending and receiving
 - Function registry for Atlas Command API calls
 - Reliability strategies (retry, acknowledgment)
-- Spooling for offline message handling
-
-**Bus Topics:**
-- Publishes: `comms.message_received`, `comms.connection_lost`, `comms.connection_restored`, `comms.response`
-- Subscribes to: `comms.send_message`, `comms.request`
-
+ - Spooling for offline message handling
+ 
 **Dependencies:** None  
-
+ 
 **Configuration:**
 ```json
 {
@@ -47,14 +43,10 @@ This catalog documents all modules available in the ATLAS Asset OS ecosystem, in
 - Route incoming messages to appropriate topics
 - Publish periodic heartbeat (every 30s)
 - Command/request/data/error message type classification
-- Forward commands to command handlers
-
-**Bus Topics:**
-- Publishes: `operations.heartbeat`, `operations.command_received`, `operations.data_received`, `operations.error_received`, `operations.message_received`
-- Subscribes to: `comms.message_received`
-
+ - Forward commands to command handlers
+ 
 **Dependencies:** `comms`  
-
+ 
 **Configuration:**
 ```json
 {
@@ -77,29 +69,9 @@ This catalog documents all modules available in the ATLAS Asset OS ecosystem, in
 - Monitor temperature
 - Battery status aggregation (for battery-powered assets)
 - System anomaly detection
-- Periodic health reporting to Atlas Command via entity health component
-
-**Bus Topics:**
-- Publishes: `health.status`
-- Subscribes to: `power_manager.status` (if available)
-
+ - Periodic health reporting to Atlas Command via entity health component
+ 
 **Dependencies:** None (optional: `power_manager`)
-
-**Configuration (planned):**
-```json
-{
-  "health_monitor": {
-    "enabled": true,
-    "report_interval_s": 60,
-    "thresholds": {
-      "cpu_warning_pct": 80,
-      "memory_warning_pct": 85,
-      "storage_warning_pct": 90,
-      "temperature_warning_c": 70
-    }
-  }
-}
-```
 
 ---
 
@@ -114,34 +86,9 @@ This catalog documents all modules available in the ATLAS Asset OS ecosystem, in
 - Camera settings management (resolution, FPS, exposure, gain)
 - Object detection (person, vehicle, animal detection)
 - Bounding box tracking
-- Frame buffer for computer vision pipeline
-
-**Bus Topics:**
-- Publishes: `camera.image_captured`, `camera.video_frame`, `camera.status`, `cv.objects_found`
-- Subscribes to: `camera.capture_image`, `camera.start_stream`, `camera.stop_stream`, `camera.configure`
-
+ - Frame buffer for computer vision pipeline
+ 
 **Dependencies:** None (optional: `image_uploader` for uploading captures)
-
-**Configuration (planned):**
-```json
-{
-  "camera_module": {
-    "enabled": true,
-    "device": "/dev/video0",
-    "resolution": "1920x1080",
-    "fps": 30,
-    "stream_enabled": false,
-    "auto_capture": false,
-    "capture_interval_s": 60,
-    "object_detection": {
-      "enabled": true,
-      "model": "yolov5n",
-      "confidence_threshold": 0.6,
-      "detect_classes": ["person", "car", "truck", "animal"]
-    }
-  }
-}
-```
 
 ---
 
@@ -157,29 +104,9 @@ This catalog documents all modules available in the ATLAS Asset OS ecosystem, in
 - Receive telemetry from autopilot (position, attitude, velocity, battery)
 - Send position commands (for guided mode navigation)
 - Heartbeat monitoring
-- System status and alerts reception
-
-**Bus Topics:**
-- Publishes: `flight.telemetry` (position, attitude, velocity, battery), `flight.status`, `flight.alerts`, `flight.mode_changed`
-- Subscribes to: `flight.set_mode`, `flight.arm`, `flight.disarm`, `flight.set_waypoint`, `flight.set_position`
-
+ - System status and alerts reception
+ 
 **Dependencies:** None
-
-**Configuration (planned):**
-```json
-{
-  "flight_controller": {
-    "enabled": true,
-    "connection": "serial:/dev/ttyACM0:57600",
-    "system_id": 1,
-    "component_id": 1,
-    "baudrate": 57600,
-    "heartbeat_timeout_s": 5,
-    "target_system": 1,
-    "target_component": 1
-  }
-}
-```
 
 ---
 
@@ -194,16 +121,12 @@ This catalog documents all modules available in the ATLAS Asset OS ecosystem, in
 - NMEA sentence parsing
 - Position, altitude, heading reporting
 - Satellite lock monitoring
-- Time synchronization
-
-**Bus Topics:**
-- Publishes: `gps.position`, `gps.status`, `gps.satellites`
-- Subscribes to: `gps.request_position`
-
+ - Time synchronization
+ 
 **Dependencies:** None
  
 ---
-
+ 
 ### `navigation` - Navigation
 **Status:** Planned  
 **Purpose:** GPS coordinate handling and waypoint management  
@@ -212,16 +135,12 @@ This catalog documents all modules available in the ATLAS Asset OS ecosystem, in
 - Distance and bearing calculations
 - Waypoint queue management
 - Target approach detection
-- Coordinate transforms (WGS84, UTM)
-
-**Bus Topics:**
-- Publishes: `nav.position`, `nav.target_reached`, `nav.distance_to_target`
-- Subscribes to: `nav.calculate_distance`, `nav.add_waypoint`, `nav.clear_waypoints`
-
+ - Coordinate transforms (WGS84, UTM)
+ 
 **Dependencies:** `gps_module` (optional, can receive position from other sources)
  
 ---
-
+ 
 ### `mission_planner` - Mission Planner
 **Status:** Planned  
 **Purpose:** Mission execution and survey pattern generation  
@@ -231,16 +150,12 @@ This catalog documents all modules available in the ATLAS Asset OS ecosystem, in
 - Mission state machine (idle, running, paused, aborted, complete)
 - Survey pattern generation (grid, lawnmower, orbit)
 - Mission progress tracking
-- Task completion callbacks
-
-**Bus Topics:**
-- Publishes: `mission.status`, `mission.waypoint_complete`, `mission.complete`
-- Subscribes to: `mission.start`, `mission.pause`, `mission.resume`, `mission.abort`
-
-**Dependencies:** `navigation`, `flight_controller`
+ - Task completion callbacks
  
+**Dependencies:** `navigation`, `flight_controller`
+  
 ---
-
+ 
 ### `power_manager` - Power Manager
 **Status:** Planned  
 **Purpose:** Battery and power system monitoring  
@@ -250,16 +165,12 @@ This catalog documents all modules available in the ATLAS Asset OS ecosystem, in
 - Low-voltage warning triggers
 - Flight time estimation
 - Solar panel monitoring (for solar-powered assets)
-- Power state reporting
-
-**Bus Topics:**
-- Publishes: `power.status`, `power.low_battery_warning`
-- Subscribes to: `power.read_status`
-
-**Dependencies:** None
+ - Power state reporting
  
+**Dependencies:** None
+  
 ---
-
+ 
 ### `failsafe_manager` - Failsafe Manager
 **Status:** Planned  
 **Purpose:** Failsafe behavior coordination  
@@ -268,16 +179,12 @@ This catalog documents all modules available in the ATLAS Asset OS ecosystem, in
 - Signal loss detection and RTL
 - Low-battery failsafe triggers
 - Geofence violation handling
-- Emergency landing coordination
-
-**Bus Topics:**
-- Publishes: `failsafe.triggered`, `failsafe.cleared`
-- Subscribes to: `comms.connection_lost`, `power.low_battery_warning`
-
-**Dependencies:** `comms`, `power_manager`, `flight_controller`
+ - Emergency landing coordination
  
+**Dependencies:** `comms`, `power_manager`, `flight_controller`
+  
 ---
-
+ 
 ### `storage_manager` - Storage Manager
 **Status:** Planned  
 **Purpose:** Disk space and file management  
@@ -286,16 +193,12 @@ This catalog documents all modules available in the ATLAS Asset OS ecosystem, in
 - Disk space monitoring
 - File rotation/deletion policies
 - Upload queue management
-- Storage status reporting
-
-**Bus Topics:**
-- Publishes: `storage.status`, `storage.low_space`
-- Subscribes to: `storage.check_space`, `storage.rotate_files`
-
-**Dependencies:** None
+ - Storage status reporting
  
+**Dependencies:** None
+  
 ---
-
+ 
 ### `image_uploader` - Image Uploader
 **Status:** Planned  
 **Purpose:** Upload images and videos to Atlas Command  
@@ -305,16 +208,12 @@ This catalog documents all modules available in the ATLAS Asset OS ecosystem, in
 - Create media_refs on entities
 - Batch upload for efficiency
 - Upload queue management
-- Retry failed uploads
-
-**Bus Topics:**
-- Publishes: `image_upload.status`, `image_upload.complete`
-- Subscribes to: `camera.image_captured`, `camera.video_segment`
-
-**Dependencies:** `comms`, `storage_manager`
+ - Retry failed uploads
  
+**Dependencies:** `comms`, `storage_manager`
+  
 ---
-
+ 
 ### `telemetry_aggregator` - Telemetry Aggregator
 **Status:** Planned  
 **Purpose:** Batch telemetry data for efficient transmission  
@@ -324,16 +223,12 @@ This catalog documents all modules available in the ATLAS Asset OS ecosystem, in
 - Time-based batching
 - Threshold-based immediate transmission
 - Data compression
-- Upload to Atlas Command
-
-**Bus Topics:**
-- Publishes: `telemetry.batch`
-- Subscribes to: `flight.telemetry`, `gps.position`, `power.status`
-
-**Dependencies:** `comms`
+ - Upload to Atlas Command
  
+**Dependencies:** `comms`
+  
 ---
-
+ 
 ### `button_handler` - Button Handler
 **Status:** Planned  
 **Purpose:** Emergency/SOS button handling  
@@ -342,14 +237,10 @@ This catalog documents all modules available in the ATLAS Asset OS ecosystem, in
 - Button press detection
 - Debouncing
 - Emergency alert broadcasting
-- Button status reporting
-
-**Bus Topics:**
-- Publishes: `button.pressed`, `button.status`
-- Subscribes to: `button.test`
-
-**Dependencies:** None
+ - Button status reporting
  
+**Dependencies:** None
+  
 ---
  
 ## Module Dependency Graph
