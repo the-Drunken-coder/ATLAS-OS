@@ -1,0 +1,23 @@
+{
+  "atlas": {
+    "base_url": "http://localhost:8000",
+    "api_token": null,
+    "asset": {
+      "id": "asset-001",
+      "name": "ATLAS Asset",
+      "model_id": "generic-asset"
+    }
+  },
+  "modules": {
+    "comms": {
+      "enabled": true,
+      "simulated": false,
+      "gateway_node_id": null,
+      "radio_port": "auto",
+      "mode": "general"
+    },
+    "operations": {
+      "enabled": true
+    }
+  }
+}

@@ -5,12 +5,9 @@ import time
 from pathlib import Path
 from typing import List, Optional
 
-# Ensure BasePlate_OS root is on path for module_base import
-_BASE_DIR = Path(__file__).resolve().parents[2]  # BasePlate_OS
-if str(_BASE_DIR) not in sys.path:
-    sys.path.insert(0, str(_BASE_DIR))
 
-from module_base import ModuleBase  # noqa: E402
+# Module base is in the same modules/ directory
+from modules.module_base import ModuleBase  # noqa: E402
 
 LOGGER = logging.getLogger("modules.operations")
 

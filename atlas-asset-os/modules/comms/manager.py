@@ -7,17 +7,14 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
 # Bridge imports (local source path wiring)
-_BASE_DIR = Path(__file__).resolve().parents[2]  # BasePlate_OS
-# Repo root is parents[4] for .../BasePlate_OS/modules/comms/manager.py
-_ROOT = Path(__file__).resolve().parents[4]
+# Repo root is parents[3] for .../ATLAS_ASSET_OS/modules/comms/manager.py
+_ROOT = Path(__file__).resolve().parents[3]
 _BRIDGE_SRC = _ROOT / "Atlas_Command" / "connection_packages" / "atlas_meshtastic_bridge" / "src"
 if str(_BRIDGE_SRC) not in sys.path:
     sys.path.insert(0, str(_BRIDGE_SRC))
-# Ensure BasePlate_OS root is on path for module_base import
-if str(_BASE_DIR) not in sys.path:
-    sys.path.insert(0, str(_BASE_DIR))
 
-from module_base import ModuleBase  # noqa: E402
+# Module base is in the same modules/ directory
+from modules.module_base import ModuleBase  # noqa: E402
 
 from atlas_meshtastic_bridge.cli import build_radio  # type: ignore  # noqa: E402
 from atlas_meshtastic_bridge.client import MeshtasticClient  # type: ignore  # noqa: E402
@@ -112,7 +109,11 @@ class CommsManager(ModuleBase):
         comms_cfg = self.get_module_config()
         self.simulated = bool(comms_cfg.get("simulated", False))
         self.gateway_node_id = comms_cfg.get("gateway_node_id") or "gateway"
-        self.radio_port = comms_cfg.get("radio_port")
+        
+        # "auto" means auto-detect the radio port (same as None/null)
+        radio_port_cfg = comms_cfg.get("radio_port")
+        self.radio_port = None if radio_port_cfg in (None, "auto") else radio_port_cfg
+        
         self.mode = comms_cfg.get("mode") or "general"
         self.spool_path = os.path.expanduser(comms_cfg.get("spool_path", "~/.baseplate_comm_spool.json"))
 

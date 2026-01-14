@@ -5,11 +5,12 @@ with automatic dependency ordering.
 """
 
 import importlib
+import importlib.util
 import logging
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Type
 
-from module_base import ModuleBase
+from modules.module_base import ModuleBase
 
 LOGGER = logging.getLogger("module_loader")
 
@@ -34,17 +35,26 @@ class ModuleLoader:
         - Module instantiation and lifecycle management
     """
     
-    def __init__(self, bus, config: Dict[str, Any]):
+    def __init__(self, bus, config: Dict[str, Any], modules_dirs: list[Path] | None = None):
         self.bus = bus
         self.config = config
-        self.modules_dir = Path(__file__).parent / "modules"
+        if modules_dirs is None:
+            # Default: search ATLAS_ASSET_OS/modules/ first, then modules/ relative to config
+            asset_os_modules = Path(__file__).resolve().parent
+            config_dir = Path(config.get("_config_dir", Path.cwd()))
+            user_modules = config_dir / "modules"
+            modules_dirs = [asset_os_modules, user_modules]
+        self.modules_dirs = [Path(d) for d in modules_dirs]
         self._module_classes: Dict[str, Type[ModuleBase]] = {}
         self._module_instances: Dict[str, ModuleBase] = {}
         self._load_order: List[str] = []
     
     def discover_modules(self) -> Dict[str, Type[ModuleBase]]:
         """
-        Discover all valid modules in the modules/ directory.
+        Discover all valid modules from multiple module directories.
+        
+        Searches directories in order, with later directories overriding earlier ones
+        if they contain modules with the same MODULE_NAME.
         
         A valid module has:
             - A manager.py file
@@ -55,61 +65,70 @@ class ModuleLoader:
         """
         discovered = {}
         
-        if not self.modules_dir.exists():
-            LOGGER.warning("Modules directory not found: %s", self.modules_dir)
-            return discovered
-        
-        for item in self.modules_dir.iterdir():
-            if not item.is_dir():
-                continue
-            if item.name.startswith("_"):
+        for modules_dir in self.modules_dirs:
+            if not modules_dir.exists():
+                LOGGER.debug("Modules directory not found: %s (skipping)", modules_dir)
                 continue
             
-            manager_path = item / "manager.py"
-            if not manager_path.exists():
-                LOGGER.debug("Skipping %s: no manager.py", item.name)
-                continue
+            LOGGER.debug("Searching for modules in: %s", modules_dir)
             
-            try:
-                # Import the module's manager
-                module_name = f"modules.{item.name}.manager"
-                spec = importlib.util.spec_from_file_location(module_name, manager_path)
-                if spec is None or spec.loader is None:
-                    LOGGER.warning("Could not load spec for %s", item.name)
+            for item in modules_dir.iterdir():
+                if not item.is_dir():
+                    continue
+                if item.name.startswith("_"):
                     continue
                 
-                module = importlib.util.module_from_spec(spec)
-                spec.loader.exec_module(module)
-                
-                # Find the ModuleBase subclass
-                manager_class = None
-                for attr_name in dir(module):
-                    attr = getattr(module, attr_name)
-                    if (isinstance(attr, type) and 
-                        issubclass(attr, ModuleBase) and 
-                        attr is not ModuleBase):
-                        manager_class = attr
-                        break
-                
-                if manager_class is None:
-                    LOGGER.debug("Skipping %s: no ModuleBase subclass found", item.name)
+                manager_path = item / "manager.py"
+                if not manager_path.exists():
+                    LOGGER.debug("Skipping %s: no manager.py", item.name)
                     continue
                 
-                # Validate MODULE_NAME is set
-                if manager_class.MODULE_NAME == "unnamed":
-                    LOGGER.warning("Module %s has unnamed MODULE_NAME, using directory name", item.name)
-                    manager_class.MODULE_NAME = item.name
-                
-                discovered[manager_class.MODULE_NAME] = manager_class
-                LOGGER.info(
-                    "Discovered module: %s v%s",
-                    manager_class.MODULE_NAME,
-                    manager_class.MODULE_VERSION,
-                )
-                
-            except Exception as e:
-                LOGGER.error("Error discovering module %s: %s", item.name, e)
-                continue
+                try:
+                    # Import the module's manager
+                    module_name = f"modules.{item.name}.manager"
+                    spec = importlib.util.spec_from_file_location(module_name, manager_path)
+                    if spec is None or spec.loader is None:
+                        LOGGER.warning("Could not load spec for %s", item.name)
+                        continue
+                    
+                    module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(module)
+                    
+                    # Find the ModuleBase subclass
+                    manager_class = None
+                    for attr_name in dir(module):
+                        attr = getattr(module, attr_name)
+                        if (isinstance(attr, type) and 
+                            issubclass(attr, ModuleBase) and 
+                            attr is not ModuleBase):
+                            manager_class = attr
+                            break
+                    
+                    if manager_class is None:
+                        LOGGER.debug("Skipping %s: no ModuleBase subclass found", item.name)
+                        continue
+                    
+                    # Validate MODULE_NAME is set
+                    if manager_class.MODULE_NAME == "unnamed":
+                        LOGGER.warning("Module %s has unnamed MODULE_NAME, using directory name", item.name)
+                        manager_class.MODULE_NAME = item.name
+                    
+                    # Later directories override earlier ones
+                    if manager_class.MODULE_NAME in discovered:
+                        LOGGER.debug("Overriding module %s from %s with version from %s", 
+                                   manager_class.MODULE_NAME, discovered[manager_class.MODULE_NAME], modules_dir)
+                    
+                    discovered[manager_class.MODULE_NAME] = manager_class
+                    LOGGER.info(
+                        "Discovered module: %s v%s (from %s)",
+                        manager_class.MODULE_NAME,
+                        manager_class.MODULE_VERSION,
+                        modules_dir.name,
+                    )
+                    
+                except Exception as e:
+                    LOGGER.error("Error discovering module %s: %s", item.name, e)
+                    continue
         
         self._module_classes = discovered
         return discovered

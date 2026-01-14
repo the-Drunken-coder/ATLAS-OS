@@ -3,14 +3,15 @@
 import sys
 from pathlib import Path
 
-ASSET_OS_ROOT = Path(__file__).resolve().parent
-BASEPLATE_OS_ROOT = ASSET_OS_ROOT / "BasePlate_OS"
+ASSET_OS_ROOT = Path(__file__).resolve().parent.parent
+FRAMEWORK_DIR = ASSET_OS_ROOT / "framework"
+MODULES_DIR = ASSET_OS_ROOT / "modules"
 
-# BasePlate OS uses module-level imports like `from bus import MessageBus`
-# which expect the project root to be on sys.path.
-BASEPLATE_PATH = str(BASEPLATE_OS_ROOT)
-if BASEPLATE_OS_ROOT.exists() and BASEPLATE_PATH not in sys.path:
-    sys.path.insert(0, BASEPLATE_PATH)
+# Add ATLAS_ASSET_OS root, framework, and modules to path for imports
+# Root must be added first so we can import framework and modules as packages
+for path_dir in (ASSET_OS_ROOT, FRAMEWORK_DIR, MODULES_DIR):
+    if path_dir.exists() and str(path_dir) not in sys.path:
+        sys.path.insert(0, str(path_dir))
 
 
 def pytest_addoption(parser):
