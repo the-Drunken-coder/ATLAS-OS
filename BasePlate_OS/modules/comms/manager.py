@@ -1,19 +1,23 @@
 import logging
 import os
+import sys
 import threading
 import time
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
-
-LOGGER = logging.getLogger("modules.comms")
+from typing import Any, Callable, Dict, List, Optional
 
 # Bridge imports (local source path wiring)
 _BASE_DIR = Path(__file__).resolve().parents[2]  # BasePlate_OS
 # Repo root is parents[4] for .../BasePlate_OS/modules/comms/manager.py
 _ROOT = Path(__file__).resolve().parents[4]
 _BRIDGE_SRC = _ROOT / "Atlas_Command" / "connection_packages" / "atlas_meshtastic_bridge" / "src"
-if str(_BRIDGE_SRC) not in os.sys.path:
-    os.sys.path.insert(0, str(_BRIDGE_SRC))
+if str(_BRIDGE_SRC) not in sys.path:
+    sys.path.insert(0, str(_BRIDGE_SRC))
+# Ensure BasePlate_OS root is on path for module_base import
+if str(_BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(_BASE_DIR))
+
+from module_base import ModuleBase  # noqa: E402
 
 from atlas_meshtastic_bridge.cli import build_radio  # type: ignore  # noqa: E402
 from atlas_meshtastic_bridge.client import MeshtasticClient  # type: ignore  # noqa: E402
@@ -32,6 +36,8 @@ except Exception:
     list_ports = None  # type: ignore
 
 from .functions import FUNCTION_REGISTRY
+
+LOGGER = logging.getLogger("modules.comms")
 
 
 def _candidate_ports() -> list[str]:
@@ -92,14 +98,18 @@ def _read_node_id(port: str) -> Optional[str]:
         return None
 
 
-class CommsManager:
+class CommsManager(ModuleBase):
+    """Communications manager for Meshtastic radio bridge."""
+    
+    MODULE_NAME = "comms"
+    MODULE_VERSION = "1.0.0"
+    DEPENDENCIES: List[str] = []  # No dependencies, starts first
+    
     def __init__(self, bus, config):
-        self.bus = bus
-        self.config = config
-        self.running = False
+        super().__init__(bus, config)
         self._thread: Optional[threading.Thread] = None
 
-        comms_cfg = config.get("modules", {}).get("comms", {})
+        comms_cfg = self.get_module_config()
         self.simulated = bool(comms_cfg.get("simulated", False))
         self.gateway_node_id = comms_cfg.get("gateway_node_id") or "gateway"
         self.radio_port = comms_cfg.get("radio_port")
@@ -160,8 +170,8 @@ class CommsManager:
         self._reconnect_attempts = 0
         LOGGER.info("Comms bridge initialized (simulated=%s, gateway=%s)", self.simulated, self.gateway_node_id)
 
-    def start(self):
-        LOGGER.info("Starting Comms Manager (simulated=%s)", self.simulated)
+    def start(self) -> None:
+        self._logger.info("Starting Comms Manager (simulated=%s)", self.simulated)
         self.running = True
         self._init_bridge()
 
@@ -172,8 +182,8 @@ class CommsManager:
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
 
-    def stop(self):
-        LOGGER.info("Stopping Comms Manager")
+    def stop(self) -> None:
+        self._logger.info("Stopping Comms Manager")
         self.running = False
         if self._thread:
             self._thread.join(timeout=1.0)

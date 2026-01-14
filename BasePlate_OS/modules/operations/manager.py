@@ -1,18 +1,33 @@
 import logging
+import sys
 import threading
 import time
+from pathlib import Path
+from typing import List, Optional
+
+# Ensure BasePlate_OS root is on path for module_base import
+_BASE_DIR = Path(__file__).resolve().parents[2]  # BasePlate_OS
+if str(_BASE_DIR) not in sys.path:
+    sys.path.insert(0, str(_BASE_DIR))
+
+from module_base import ModuleBase  # noqa: E402
 
 LOGGER = logging.getLogger("modules.operations")
 
-class OperationsManager:
-    def __init__(self, bus, config):
-        self.bus = bus
-        self.config = config
-        self.running = False
-        self._thread = None
 
-    def start(self):
-        LOGGER.info("Starting Operations Manager")
+class OperationsManager(ModuleBase):
+    """Operations manager for message routing and heartbeat."""
+    
+    MODULE_NAME = "operations"
+    MODULE_VERSION = "1.0.0"
+    DEPENDENCIES: List[str] = ["comms"]  # Depends on comms module
+    
+    def __init__(self, bus, config):
+        super().__init__(bus, config)
+        self._thread: Optional[threading.Thread] = None
+
+    def start(self) -> None:
+        self._logger.info("Starting Operations Manager")
         self.running = True
         
         # Subscribe to bus events
@@ -21,8 +36,8 @@ class OperationsManager:
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
 
-    def stop(self):
-        LOGGER.info("Stopping Operations Manager")
+    def stop(self) -> None:
+        self._logger.info("Stopping Operations Manager")
         self.running = False
         if self._thread:
             self._thread.join(timeout=1.0)
@@ -38,7 +53,7 @@ class OperationsManager:
     def _handle_comms_message(self, data):
         """Handle messages received from the outside world."""
         if not data or not isinstance(data, dict):
-            LOGGER.warning("Invalid message structure received: %s", data)
+            self._logger.warning("Invalid message structure received: %s", data)
             return
         
         # Extract message fields
@@ -48,7 +63,7 @@ class OperationsManager:
         msg_data = data.get("data", {})
         sender = data.get("sender")
         
-        LOGGER.info(
+        self._logger.info(
             "Received message via comms: sender=%s, type=%s, command=%s, id=%s",
             sender,
             msg_type,
@@ -97,7 +112,7 @@ class OperationsManager:
             )
         else:
             # Unknown type, log and publish to generic topic
-            LOGGER.warning("Unknown message type '%s' received", msg_type)
+            self._logger.warning("Unknown message type '%s' received", msg_type)
             self.bus.publish(
                 "operations.message_received",
                 {

@@ -15,6 +15,7 @@ for p in (str(_BRIDGE_SRC), str(_HTTP_CLIENT_SRC)):
         sys.path.insert(0, p)
 
 from bus import MessageBus
+from module_loader import ModuleLoader, ModuleLoadError, DependencyError
 
 # Configure logging
 logging.basicConfig(
@@ -26,12 +27,13 @@ logging.basicConfig(
 )
 LOGGER = logging.getLogger("master")
 
+
 class OSManager:
     def __init__(self):
         self.running = True
         self.bus = MessageBus()
         self.config = self._load_config()
-        self.modules = []
+        self.module_loader = ModuleLoader(self.bus, self.config)
 
     def _load_config(self) -> dict:
         config_path = Path(__file__).resolve().parent / "config.json"
@@ -46,31 +48,34 @@ class OSManager:
             sys.exit(1)
 
     def _start_modules(self):
-        # Import modules dynamically or statically
-        # For this version, we'll import them statically to ensure they exist
+        """Discover, load, and start all enabled modules."""
         try:
-            from modules.operations.manager import OperationsManager
-            from modules.comms.manager import CommsManager
+            # Discover available modules
+            discovered = self.module_loader.discover_modules()
+            if not discovered:
+                LOGGER.warning("No modules discovered")
+                return
             
-            # Initialize Operations
-            if self.config.get("modules", {}).get("operations", {}).get("enabled", True):
-                ops_mgr = OperationsManager(self.bus, self.config)
-                self.modules.append(ops_mgr)
-
-            # Initialize Comms
-            if self.config.get("modules", {}).get("comms", {}).get("enabled", True):
-                comms_mgr = CommsManager(self.bus, self.config)
-                self.modules.append(comms_mgr)
-
+            LOGGER.info("Discovered %d module(s): %s", len(discovered), ", ".join(discovered.keys()))
+            
+            # Resolve dependencies and determine load order
+            load_order = self.module_loader.resolve_dependencies()
+            
+            # Load and instantiate modules
+            self.module_loader.load_modules()
+            
             # Start all modules
-            for mod in self.modules:
-                if hasattr(mod, "start"):
-                    mod.start()
-
-        except ImportError as e:
-            LOGGER.error(f"Failed to import modules: {e}")
+            self.module_loader.start_modules()
+            
+        except DependencyError as e:
+            LOGGER.error(f"Module dependency error: {e}")
+            sys.exit(1)
+        except ModuleLoadError as e:
+            LOGGER.error(f"Module load error: {e}")
+            sys.exit(1)
         except Exception as e:
             LOGGER.error(f"Failed to start modules: {e}")
+            sys.exit(1)
 
     def run(self):
         LOGGER.info("BasePlate OS booting...")
@@ -104,13 +109,8 @@ class OSManager:
         self.running = False
         self.bus.publish("os.shutdown", {})
         
-        # Stop modules
-        for mod in self.modules:
-            if hasattr(mod, "stop"):
-                try:
-                    mod.stop()
-                except Exception as e:
-                    LOGGER.error(f"Error stopping module: {e}")
+        # Stop modules in reverse dependency order
+        self.module_loader.stop_modules()
 
         self.bus.shutdown()
         LOGGER.info("OS Halted.")
