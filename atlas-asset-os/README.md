@@ -130,6 +130,11 @@ Tests are organized in the `tests/` directory:
 - **Unit tests** (`tests/unit/`): Test individual components in isolation
 - **Integration tests** (`tests/integration/`): Test component interactions
 
+From `ATLAS_ASSET_OS/`, install test dependencies first (installs the Meshtastic bridge and its requirements):
+```bash
+pip install -r requirements-test.txt
+```
+
 Run tests:
 ```bash
 pytest tests/
