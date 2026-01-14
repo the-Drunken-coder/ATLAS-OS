@@ -8,8 +8,8 @@ from typing import Any, Callable, Dict, Optional
 LOGGER = logging.getLogger("modules.comms")
 
 # Bridge imports (local source path wiring)
-_BASE_DIR = Path(__file__).resolve().parents[2]  # BasePlate_OS_Next
-# Repo root is parents[4] for .../BasePlate_OS_Next/modules/comms/manager.py
+_BASE_DIR = Path(__file__).resolve().parents[2]  # BasePlate_OS
+# Repo root is parents[4] for .../BasePlate_OS/modules/comms/manager.py
 _ROOT = Path(__file__).resolve().parents[4]
 _BRIDGE_SRC = _ROOT / "Atlas_Command" / "connection_packages" / "atlas_meshtastic_bridge" / "src"
 if str(_BRIDGE_SRC) not in os.sys.path:

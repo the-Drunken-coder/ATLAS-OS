@@ -73,7 +73,7 @@ class OSManager:
             LOGGER.error(f"Failed to start modules: {e}")
 
     def run(self):
-        LOGGER.info("BasePlate OS Next booting...")
+        LOGGER.info("BasePlate OS booting...")
         
         self._start_modules()
         

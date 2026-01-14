@@ -4,7 +4,7 @@ import sys
 from pathlib import Path
 
 ASSET_OS_ROOT = Path(__file__).resolve().parent
-BASEPLATE_OS_ROOT = ASSET_OS_ROOT / "BasePlate_OS_Next"
+BASEPLATE_OS_ROOT = ASSET_OS_ROOT / "BasePlate_OS"
 
 # BasePlate OS uses module-level imports like `from bus import MessageBus`
 # which expect the project root to be on sys.path.
