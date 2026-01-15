@@ -1,8 +1,7 @@
 """Tests for advanced CommsManager functionality including monitoring and promotion."""
 
 import time
-from unittest.mock import Mock, MagicMock, patch
-import pytest
+from unittest.mock import Mock
 
 from framework.bus import MessageBus
 from modules.comms.manager import CommsManager
