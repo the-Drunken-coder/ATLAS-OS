@@ -2,5 +2,6 @@
     "api_base_url": "http://localhost:8000",
     "api_token": null,
     "simulate_radio": false,
-    "mode": "general"
+    "mode": "general",
+    "enable_message_logging": true
 }
