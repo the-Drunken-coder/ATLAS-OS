@@ -50,6 +50,7 @@ class CommsManager(ModuleBase):
         self._method_sequence: list[str] = []
         self._method_index = 0
         self._fallback_start_index: Optional[int] = None
+        self._last_method: Optional[str] = None
         self._last_wifi_check = 0.0
         self._wifi_check_interval = 5.0
         self._last_promotion_check = 0.0
@@ -129,7 +130,19 @@ class CommsManager(ModuleBase):
         if self.connected and self.client:
             self._register_functions()
             self._reconnect_attempts = 0
+            self._publish_method_change()
             LOGGER.info("Comms bridge initialized (method=%s)", self.method)
+
+    def _publish_method_change(self, *, force: bool = False) -> None:
+        if not self.method:
+            return
+        if not force and self.method == self._last_method:
+            return
+        self._last_method = self.method
+        self.bus.publish(
+            "comms.method_changed",
+            {"method": self.method, "timestamp": time.time()},
+        )
 
     def _build_wifi_client(self):
         atlas_cfg = self.config.get("atlas", {}) if isinstance(self.config, dict) else {}
@@ -184,6 +197,7 @@ class CommsManager(ModuleBase):
         # Subscribe to outgoing requests if needed later
         self.bus.subscribe("comms.send_message", self._handle_send_request)
         self.bus.subscribe("comms.request", self._handle_bus_request)
+        self.bus.subscribe("os.boot_complete", self._handle_boot_complete)
 
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
@@ -460,6 +474,7 @@ class CommsManager(ModuleBase):
             self.connected = True
             self._method_index = 0
             self._register_functions()
+            self._publish_method_change()
             LOGGER.info("Promoted comms to wifi")
             return True
         return False
@@ -492,3 +507,7 @@ class CommsManager(ModuleBase):
             return
         with self._queue_lock:
             self._request_queue.append(data)
+
+    def _handle_boot_complete(self, _data):
+        """Handle os.boot_complete event."""
+        self._publish_method_change(force=True)

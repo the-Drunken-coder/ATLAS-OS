@@ -52,7 +52,9 @@ Dev-only priority list (not user config):
 
 **Capabilities:**
 - Route incoming messages to appropriate topics
-- Publish periodic heartbeat (every 30s)
+- Asset self-registration on startup
+- Publish periodic heartbeat (default 30s)
+- Periodic Atlas Command check-ins (interval depends on comms method)
 - Command/request/data/error message type classification
  - Forward commands to command handlers
  
@@ -62,62 +64,50 @@ Dev-only priority list (not user config):
 ```json
 {
   "operations": {
-    "enabled": true
+    "enabled": true,
+    "heartbeat_interval_s": 30.0,
+    "checkin_interval_s": 30.0,
+    "checkin_interval_wifi_s": 1.0,
+    "checkin_interval_mesh_s": 15.0,
+    "checkin_payload": {
+      "heading_deg": 0.0
+    }
   }
 }
 ```
 
 ---
 
-## Work In Progress (WIP)
-
-### `health_monitor` - Health Monitor
-**Status:** WIP  
-**Purpose:** System health aggregation and reporting  
+### `sensors` - Sensor Manager
+**Version:** 1.0.0  
+**Purpose:** Run sensor workers that combine capture + analysis  
 
 **Capabilities:**
-- Monitor CPU usage, memory usage, storage space
-- Monitor temperature
-- Battery status aggregation (for battery-powered assets)
-- System anomaly detection
- - Periodic health reporting to Atlas Command via entity health component
- 
-**Dependencies:** None (optional: `power_manager`)
+- Load sensor worker plugins from config
+- Start/stop workers with the OS lifecycle
+- Publish analyzed outputs on `sensor.output`
 
----
+**Dependencies:** None  
 
-### `camera_module` - Camera & Computer Vision
-**Status:** WIP  
-**Purpose:** Camera control and computer vision processing  
-
-**Capabilities:**
-- Camera initialization and control (USB, Pi camera, IP camera)
-- Image capture (still photos)
-- Video recording and streaming
-- Camera settings management (resolution, FPS, exposure, gain)
-- Object detection (person, vehicle, animal detection)
-- Bounding box tracking
- - Frame buffer for computer vision pipeline
- 
-**Dependencies:** None (optional: `image_uploader` for uploading captures)
-
----
-
-### `flight_controller` - Flight Controller Interface
-**Status:** WIP  
-**Purpose:** MAVLink communication with flight controllers (Pixhawk, etc.)  
-
-**Capabilities:**
-- MAVLink connection to autopilot (serial or UDP)
-- Flight mode management (AUTO, LOITER, RTL, GUIDED, STABILIZE)
-- Arm/disarm control
-- Send waypoint commands to autopilot
-- Receive telemetry from autopilot (position, attitude, velocity, battery)
-- Send position commands (for guided mode navigation)
-- Heartbeat monitoring
- - System status and alerts reception
- 
-**Dependencies:** None
+**Configuration:**
+```json
+{
+  "sensors": {
+    "enabled": true,
+    "devices": [
+      {
+        "id": "camera-front",
+        "type": "camera_bearing",
+        "enabled": true,
+        "interval_s": 1.0,
+        "bearing_deg": 0.0,
+        "elevation_deg": 0.0,
+        "confidence": 0.5
+      }
+    ]
+  }
+}
+```
 
 ---
 

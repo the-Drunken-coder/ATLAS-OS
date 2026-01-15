@@ -4,6 +4,7 @@
     "api_token": null,
     "asset": {
       "id": "asset-001",
+      "type": "digital",
       "name": "ATLAS Asset",
       "model_id": "generic-asset"
     }
@@ -26,7 +27,20 @@
       }
     },
     "operations": {
-      "enabled": true
+      "enabled": true,
+      "heartbeat_interval_s": 30.0,
+      "checkin_interval_s": 30.0,
+      "checkin_interval_wifi_s": 1.0,
+      "checkin_interval_mesh_s": 15.0,
+      "checkin_payload": {
+        "latitude": 0.0,
+        "longitude": 0.0
+      },
+      "_comment": "Set checkin_interval_s to 0 or negative to disable check-ins. Method-specific intervals (checkin_interval_wifi_s, checkin_interval_mesh_s) override the default when that method is active."
+    },
+    "sensors": {
+      "enabled": false,
+      "devices": []
     }
   }
 }
