@@ -8,11 +8,11 @@ This catalog documents all modules available in the ATLAS Asset OS ecosystem, in
 
 ### `comms` - Communications Manager
 **Version:** 1.0.0  
-**Purpose:** Meshtastic radio bridge for Atlas Command communication  
+**Purpose:** Multi-transport comms layer (wifi direct + Meshtastic bridge)  
 
 **Capabilities:**
-- Radio connection management (auto-discovery, reconnection)
-- Message sending and receiving
+- Transport selection and connection management
+- Message sending and receiving (transport dependent)
 - Function registry for Atlas Command API calls
 - Reliability strategies (retry, acknowledgment)
  - Spooling for offline message handling
@@ -24,14 +24,25 @@ This catalog documents all modules available in the ATLAS Asset OS ecosystem, in
 {
   "comms": {
     "enabled": true,
+    "enabled_methods": ["wifi", "meshtastic"],
     "simulated": false,
     "gateway_node_id": "gateway",
     "radio_port": "auto",
     "mode": "general",
-    "spool_path": "~/.baseplate_comm_spool.json"
+    "spool_path": "~/.baseplate_comm_spool.json",
+    "wifi": {
+      "connect_on_start": true,
+      "scan_public_networks": true,
+      "networks": [],
+      "interface": null,
+      "timeout_s": 10.0
+    }
   }
 }
 ```
+
+Dev-only priority list (not user config):
+- `modules/comms/comms_priority.json` controls the method order (default `wifi`, then `meshtastic`).
 
 ---
 

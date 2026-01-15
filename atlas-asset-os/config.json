@@ -11,10 +11,19 @@
   "modules": {
     "comms": {
       "enabled": true,
+      "enabled_methods": ["wifi", "meshtastic"],
       "simulated": false,
       "gateway_node_id": null,
       "radio_port": "auto",
-      "mode": "general"
+      "mode": "general",
+      "spool_path": "~/.baseplate_comm_spool.json",
+      "wifi": {
+        "connect_on_start": true,
+        "scan_public_networks": true,
+        "networks": [],
+        "interface": null,
+        "timeout_s": 10.0
+      }
     },
     "operations": {
       "enabled": true

@@ -1,102 +1,23 @@
+import json
 import logging
 import os
-import sys
 import threading
 import time
+from collections import deque
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
 
-# Bridge imports (local source path wiring)
-# Repo root is parents[3] for .../ATLAS_ASSET_OS/modules/comms/manager.py
-_ROOT = Path(__file__).resolve().parents[3]
-_BRIDGE_SRC = _ROOT / "Atlas_Command" / "connection_packages" / "atlas_meshtastic_bridge" / "src"
-if str(_BRIDGE_SRC) not in sys.path:
-    sys.path.insert(0, str(_BRIDGE_SRC))
-
-# Module base is in the same modules/ directory
-from modules.module_base import ModuleBase  # noqa: E402
-
-from atlas_meshtastic_bridge.cli import build_radio  # type: ignore  # noqa: E402
-from atlas_meshtastic_bridge.client import MeshtasticClient  # type: ignore  # noqa: E402
-from atlas_meshtastic_bridge.modes import load_mode_profile  # type: ignore  # noqa: E402
-from atlas_meshtastic_bridge.reliability import strategy_from_name  # type: ignore  # noqa: E402
-from atlas_meshtastic_bridge.transport import MeshtasticTransport  # type: ignore  # noqa: E402
-
-try:
-    from meshtastic import util as meshtastic_util  # type: ignore
-except Exception:
-    meshtastic_util = None  # type: ignore
-
-try:
-    from serial.tools import list_ports  # type: ignore
-except Exception:
-    list_ports = None  # type: ignore
-
-from .functions import FUNCTION_REGISTRY  # noqa: E402
+from modules.module_base import ModuleBase
+from modules.comms.commands import FUNCTION_REGISTRY
+from modules.comms.transports.meshtastic import build_meshtastic_client
+from modules.comms.transports.wifi import build_wifi_client
+from modules.comms.types import MeshtasticClient
 
 LOGGER = logging.getLogger("modules.comms")
 
 
-def _candidate_ports() -> list[str]:
-    seen: list[str] = []
-    if meshtastic_util:
-        try:
-            ports = meshtastic_util.findPorts() or []
-            for p in ports:
-                if isinstance(p, dict) and "device" in p:
-                    seen.append(str(p["device"]))
-                else:
-                    seen.append(str(p))
-        except Exception as exc:
-            LOGGER.warning("Meshtastic port discovery failed: %s", exc)
-    if list_ports:
-        try:
-            for p in list_ports.comports():
-                if p.device not in seen:
-                    seen.append(p.device)
-        except Exception as exc:
-            LOGGER.warning("pyserial port discovery failed: %s", exc)
-    return seen
-
-
-def _find_available_port() -> Optional[str]:
-    """Return the first port we can open, skipping busy ones."""
-    try:
-        from meshtastic import serial_interface  # type: ignore
-    except Exception:
-        serial_interface = None  # type: ignore
-    for port in _candidate_ports():
-        if serial_interface is None:
-            return port
-        try:
-            iface = serial_interface.SerialInterface(port)
-            iface.close()
-            return port
-        except Exception as exc:
-            LOGGER.warning("Port %s busy/unavailable (%s), trying next", port, exc)
-            continue
-    return None
-
-
-def _read_node_id(port: str) -> Optional[str]:
-    try:
-        from meshtastic import serial_interface  # type: ignore
-    except Exception:
-        return None
-    try:
-        iface = serial_interface.SerialInterface(port)
-        info = getattr(iface, "getMyNodeInfo", lambda: {})() or {}
-        user = info.get("user") if isinstance(info, dict) else None
-        node_id = user.get("id") if isinstance(user, dict) else None
-        iface.close()
-        return str(node_id) if node_id else None
-    except Exception as exc:
-        LOGGER.warning("Could not read node ID from %s: %s", port, exc)
-        return None
-
-
 class CommsManager(ModuleBase):
-    """Communications manager for Meshtastic radio bridge."""
+    """Communications manager for Atlas Command connections."""
     
     MODULE_NAME = "comms"
     MODULE_VERSION = "1.0.0"
@@ -109,6 +30,10 @@ class CommsManager(ModuleBase):
         comms_cfg = self.get_module_config()
         self.simulated = bool(comms_cfg.get("simulated", False))
         self.gateway_node_id = comms_cfg.get("gateway_node_id") or "gateway"
+        self.method = None
+        self.enabled_methods = self._resolve_enabled_methods(comms_cfg)
+        self.priority_methods = self._load_priority_methods()
+        self.wifi_config = comms_cfg.get("wifi", {})
         
         # "auto" means auto-detect the radio port (same as None/null)
         radio_port_cfg = comms_cfg.get("radio_port")
@@ -122,54 +47,134 @@ class CommsManager(ModuleBase):
         self.connected = False
         self._reconnect_attempts = 0
         self._max_reconnect_delay = 30.0
+        self._method_sequence: list[str] = []
+        self._method_index = 0
+        self._fallback_start_index: Optional[int] = None
+        self._last_wifi_check = 0.0
+        self._wifi_check_interval = 5.0
+        self._last_promotion_check = 0.0
+        self._promotion_interval = 15.0
+        self._request_queue: deque[dict[str, Any]] = deque()
+        self._queue_lock = threading.Lock()
+        self._processing_request = False
 
-    def _init_bridge(self) -> None:
-        # Load mode profile for reliability/transport defaults
-        profile = {}
+    def _load_priority_methods(self) -> list[str]:
+        config_path = Path(__file__).resolve().parent / "comms_priority.json"
+        if not config_path.exists():
+            return ["meshtastic"]
         try:
-            profile = load_mode_profile(self.mode)
-            LOGGER.info("Loaded mode profile %s for comms", self.mode)
+            payload = json.loads(config_path.read_text())
+            methods = payload.get("priority_methods") if isinstance(payload, dict) else None
+            if isinstance(methods, list) and methods:
+                return [str(m) for m in methods]
         except Exception as exc:
-            LOGGER.warning("Failed to load mode profile %s: %s (using defaults)", self.mode, exc)
-            profile = {}
+            LOGGER.warning("Failed to load comms priority config: %s", exc)
+        return ["meshtastic"]
 
-        mode_rel = profile.get("reliability_method") if isinstance(profile, dict) else None
-        reliability = strategy_from_name(mode_rel)
-        if mode_rel:
-            os.environ["ATLAS_RELIABILITY_METHOD"] = str(mode_rel)
+    def _resolve_enabled_methods(self, comms_cfg: Dict[str, Any]) -> Optional[list[str]]:
+        enabled = comms_cfg.get("enabled_methods") or comms_cfg.get("methods")
+        if isinstance(enabled, list) and enabled:
+            return [str(m) for m in enabled]
+        legacy = comms_cfg.get("method") or comms_cfg.get("transport")
+        if legacy:
+            return [str(legacy)]
+        return None
 
-        port = self.radio_port
-        if not self.simulated and not port:
-            port = _find_available_port()
-            if not port:
-                LOGGER.error("No radio port available for comms")
-                return
-            LOGGER.info("Comms discovered radio port: %s", port)
+    def _iter_methods(self) -> list[str]:
+        if self.enabled_methods:
+            filtered = [m for m in self.priority_methods if m in self.enabled_methods]
+            if not filtered:
+                LOGGER.error(
+                    "No enabled comms methods match priority list: enabled=%s priority=%s",
+                    self.enabled_methods,
+                    self.priority_methods,
+                )
+            return filtered
+        return list(self.priority_methods)
 
-        node_id = _read_node_id(port) if (port and not self.simulated) else None
-        if node_id:
-            LOGGER.info("Comms using radio node ID: %s", node_id)
-
-        transport_kwargs: Dict[str, Any] = {}
-        if isinstance(profile, dict):
-            transport_kwargs = profile.get("transport", {}) or {}
-
-        radio = build_radio(self.simulated, port, node_id)
-        transport = MeshtasticTransport(
-            radio,
-            spool_path=self.spool_path,
-            reliability=reliability,
-            enable_spool=True,
-            **transport_kwargs,
-        )
-        self.client = MeshtasticClient(transport, gateway_node_id=self.gateway_node_id)
-
-        # Register callable functions for other modules (client injected)
+    def _register_functions(self) -> None:
+        self.functions.clear()
+        if not self.connected or not self.client:
+            return
         for name, func in FUNCTION_REGISTRY.items():
             self.functions[name] = lambda _f=func, **kwargs: _f(self.client, **kwargs)
+
+    def _init_bridge(self, start_index: int = 0) -> None:
+        self.client = None
+        self.connected = False
+
+        self._method_sequence = self._iter_methods()
+        self._method_index = max(0, start_index)
+
+        initialized = False
+        for idx, method in enumerate(self._method_sequence[start_index:], start=start_index):
+            if method == "wifi":
+                initialized = self._init_wifi()
+            elif method == "meshtastic":
+                initialized = self._init_meshtastic()
+            else:
+                LOGGER.error("Unknown comms method '%s'", method)
+                continue
+
+            if initialized:
+                self._method_index = idx
+                break
+
+        if not initialized:
+            LOGGER.error("No comms method initialized successfully")
+            return
+
+        # Register callable functions for other modules (client injected)
+        # Only register functions if we successfully connected
+        if self.connected and self.client:
+            self._register_functions()
+            self._reconnect_attempts = 0
+            LOGGER.info("Comms bridge initialized (method=%s)", self.method)
+
+    def _build_wifi_client(self):
+        atlas_cfg = self.config.get("atlas", {}) if isinstance(self.config, dict) else {}
+        base_url = atlas_cfg.get("base_url")
+        api_token = atlas_cfg.get("api_token")
+
+        # Validate base_url before passing to build_wifi_client
+        if not base_url or not isinstance(base_url, str) or not base_url.strip():
+            LOGGER.error("WiFi comms requires a valid atlas.base_url in configuration")
+            raise RuntimeError("WiFi comms requires a valid atlas.base_url in configuration")
+
+        return build_wifi_client(
+            base_url=base_url,
+            api_token=api_token,
+            wifi_config=self.wifi_config,
+        )
+
+    def _init_wifi(self) -> bool:
+        try:
+            self.client = self._build_wifi_client()
+        except Exception as exc:
+            LOGGER.error("Failed to initialize wifi comms: %s", exc)
+            return False
+
+        self.method = "wifi"
         self.connected = True
-        self._reconnect_attempts = 0
-        LOGGER.info("Comms bridge initialized (simulated=%s, gateway=%s)", self.simulated, self.gateway_node_id)
+        self._last_wifi_check = time.time()
+        return True
+
+    def _init_meshtastic(self) -> bool:
+        try:
+            self.client = build_meshtastic_client(
+                simulated=self.simulated,
+                radio_port=self.radio_port,
+                gateway_node_id=self.gateway_node_id,
+                mode=self.mode,
+                spool_path=self.spool_path,
+            )
+        except Exception as exc:
+            LOGGER.error("Failed to initialize meshtastic comms: %s", exc)
+            return False
+
+        self.method = "meshtastic"
+        self.connected = True
+        return True
 
     def start(self) -> None:
         self._logger.info("Starting Comms Manager (simulated=%s)", self.simulated)
@@ -189,7 +194,7 @@ class CommsManager(ModuleBase):
         if self._thread:
             self._thread.join(timeout=1.0)
         # Close radio if present
-        if self.client and hasattr(self.client.transport.radio, "close"):
+        if self.method == "meshtastic" and self.client and hasattr(self.client.transport.radio, "close"):
             try:
                 self.client.transport.radio.close()
             except Exception:
@@ -205,7 +210,44 @@ class CommsManager(ModuleBase):
                 self._attempt_reconnection()
                 time.sleep(1)
                 continue
+
+            if self.method == "wifi":
+                now = time.time()
+                if now - self._last_wifi_check >= self._wifi_check_interval:
+                    self._last_wifi_check = now
+                    try:
+                        if not self.client.is_connected(self.wifi_config.get("interface")):
+                            self._handle_disconnection()
+                            continue
+                        if not self.client.has_connectivity():
+                            self.client.mark_bad_current(self.wifi_config.get("interface"))
+                            self.client.disconnect(self.wifi_config.get("interface"))
+                            self._handle_disconnection()
+                            continue
+                    except Exception as exc:
+                        LOGGER.warning("WiFi connection check failed: %s", exc)
+                        self._handle_disconnection()
+                        continue
+
+            if self._should_promote():
+                if self._promote_to_preferred():
+                    continue
+
+            request = self._dequeue_request()
+            if request:
+                self._processing_request = True
+                try:
+                    self._process_request(request)
+                finally:
+                    self._processing_request = False
+                if self._should_promote():
+                    self._promote_to_preferred()
+                continue
             
+            if self.method != "meshtastic":
+                time.sleep(1)
+                continue
+
             try:
                 # Poll for incoming messages
                 sender, message = self.client.transport.receive_message(timeout=0.5)
@@ -252,11 +294,16 @@ class CommsManager(ModuleBase):
                     time.sleep(0.1)  # Brief pause before retry
     
     def _handle_disconnection(self):
-        """Handle radio disconnection."""
+        """Handle transport disconnection."""
         if self.connected:
             self.connected = False
             self.bus.publish("comms.connection_lost", {"timestamp": time.time()})
-            LOGGER.warning("Radio connection lost")
+            LOGGER.warning("Comms connection lost")
+            next_index = self._method_index + 1
+            if self._method_sequence and next_index < len(self._method_sequence):
+                self._fallback_start_index = next_index
+            else:
+                self._fallback_start_index = 0
     
     def _attempt_reconnection(self):
         """Attempt to reconnect to the radio with exponential backoff."""
@@ -267,46 +314,44 @@ class CommsManager(ModuleBase):
         delay = min(2.0 ** self._reconnect_attempts, self._max_reconnect_delay)
         
         if self._reconnect_attempts == 0:
-            LOGGER.info("Attempting to reconnect radio...")
+            LOGGER.info("Attempting to reconnect comms...")
         else:
-            LOGGER.info("Retrying radio reconnection (attempt %d, delay %.1fs)...", self._reconnect_attempts + 1, delay)
+            LOGGER.info(
+                "Retrying comms reconnection (attempt %d, delay %.1fs)...",
+                self._reconnect_attempts + 1,
+                delay,
+            )
             time.sleep(delay)
         
         try:
             # Try to reinitialize the bridge
-            self._init_bridge()
+            start_index = self._fallback_start_index or 0
+            self._init_bridge(start_index=start_index)
             
             # If we successfully reconnected
             if self.client and self.connected:
                 if self._reconnect_attempts > 0:
-                    LOGGER.info("Radio reconnection successful")
+                    LOGGER.info("Comms reconnection successful")
                     self.bus.publish("comms.connection_restored", {"timestamp": time.time()})
                 self._reconnect_attempts = 0
+                self._fallback_start_index = None
             else:
                 self._reconnect_attempts += 1
+                if self._fallback_start_index and self._fallback_start_index != 0:
+                    self._fallback_start_index = 0
                 
         except Exception as exc:
             LOGGER.warning("Reconnection attempt failed: %s", exc)
             self._reconnect_attempts += 1
             self.connected = False
 
-    def _handle_send_request(self, data):
-        """Handle request to send message to outside world."""
-        dest = data.get("dest")
-        payload = data.get("payload")
-        LOGGER.info("Stub send request to %s: %s", dest, payload)
-        # Hook for future outbound routing
+    def _dequeue_request(self) -> Optional[dict[str, Any]]:
+        with self._queue_lock:
+            if self._request_queue:
+                return self._request_queue.popleft()
+        return None
 
-    def _handle_bus_request(self, data):
-        """Dispatch a comms function call from the bus.
-
-        Expected payload:
-            {
-              "function": "list_entities",
-              "args": {...},            # optional, defaults to {}
-              "request_id": "abc123"    # optional correlation id
-            }
-        """
+    def _process_request(self, data: dict[str, Any]) -> None:
         if not data:
             return
         func_name = data.get("function")
@@ -321,7 +366,7 @@ class CommsManager(ModuleBase):
             LOGGER.warning("Unknown comms function requested: %s", func_name)
             return
         if self.client is None:
-            LOGGER.warning("Meshtastic client not initialized; cannot handle %s", func_name)
+            LOGGER.warning("Comms client not initialized; cannot handle %s", func_name)
             return
 
         start = time.time()
@@ -339,15 +384,111 @@ class CommsManager(ModuleBase):
                 },
             )
         except Exception as exc:
+            error = exc
+            if not self.connected:
+                prev_method = self.method
+                self._handle_disconnection()
+                self._attempt_reconnection()
+                if self.connected and self.method != prev_method:
+                    retry_func = self.functions.get(func_name)
+                    if retry_func is not None:
+                        try:
+                            result = retry_func(**args)
+                            elapsed = time.time() - start
+                            self.bus.publish(
+                                "comms.response",
+                                {
+                                    "function": func_name,
+                                    "request_id": req_id,
+                                    "ok": True,
+                                    "result": result.to_dict() if hasattr(result, "to_dict") else result,
+                                    "elapsed": elapsed,
+                                },
+                            )
+                            return
+                        except Exception as retry_exc:
+                            error = retry_exc
             elapsed = time.time() - start
-            LOGGER.exception("Error handling comms function %s: %s", func_name, exc)
+            LOGGER.exception("Error handling comms function %s: %s", func_name, error)
             self.bus.publish(
                 "comms.response",
                 {
                     "function": func_name,
                     "request_id": req_id,
                     "ok": False,
-                    "error": str(exc),
+                    "error": str(error),
                     "elapsed": elapsed,
                 },
             )
+
+    def _should_promote(self) -> bool:
+        if not self.connected or not self._method_sequence:
+            return False
+        if self.method == self._method_sequence[0]:
+            return False
+        if self._processing_request:
+            return False
+        if not self._meshtastic_outbox_empty():
+            return False
+        now = time.time()
+        if now - self._last_promotion_check < self._promotion_interval:
+            return False
+        self._last_promotion_check = now
+        return True
+
+    def _promote_to_preferred(self) -> bool:
+        preferred = self._method_sequence[0] if self._method_sequence else None
+        if preferred == "wifi":
+            if not self._meshtastic_outbox_empty():
+                return False
+            try:
+                wifi_client = self._build_wifi_client()
+            except Exception as exc:
+                LOGGER.info("Preferred wifi not available: %s", exc)
+                return False
+            if not wifi_client.is_connected(self.wifi_config.get("interface")):
+                return False
+            if self.method == "meshtastic" and self.client and hasattr(self.client.transport.radio, "close"):
+                try:
+                    self.client.transport.radio.close()
+                except Exception:
+                    # Ignore errors during cleanup - we're switching transports anyway
+                    # and the old transport will be garbage collected
+                    pass
+            self.client = wifi_client
+            self.method = "wifi"
+            self.connected = True
+            self._method_index = 0
+            self._register_functions()
+            LOGGER.info("Promoted comms to wifi")
+            return True
+        return False
+
+    def _meshtastic_outbox_empty(self) -> bool:
+        if self.method != "meshtastic":
+            return True
+        transport = getattr(self.client, "transport", None)
+        spool = getattr(transport, "spool", None) if transport else None
+        depth = None
+        if spool and hasattr(spool, "depth"):
+            try:
+                depth = spool.depth()
+            except Exception:
+                depth = None
+        if depth is None:
+            return True
+        return depth == 0
+
+    def _handle_send_request(self, data):
+        """Handle request to send message to outside world."""
+        dest = data.get("dest")
+        payload = data.get("payload")
+        LOGGER.info("Stub send request to %s: %s", dest, payload)
+        # Hook for future outbound routing
+
+    def _handle_bus_request(self, data):
+        """Enqueue a comms function call for ordered processing."""
+        if not data:
+            return
+        with self._queue_lock:
+            self._request_queue.append(data)

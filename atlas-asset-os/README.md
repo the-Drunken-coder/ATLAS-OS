@@ -15,9 +15,10 @@ ATLAS_ASSET_OS/
 │   ├── module_base.py     # Base class for all modules
 │   ├── module_loader.py   # Module discovery and lifecycle management
 │   ├── __init__.py        # Module infrastructure exports
-│   ├── comms/             # Communications module (Meshtastic bridge)
+│   ├── comms/             # Communications module (multi-transport)
 │   │   ├── manager.py     # CommsManager implementation
-│   │   └── functions/     # 34 API function wrappers
+│   │   └── commands/      # API command wrappers
+│   │   └── transports/    # Transport implementations (wifi, meshtastic)
 │   └── operations/         # Operations module
 │       ├── manager.py     # OperationsManager implementation
 │       └── registration.py # Asset self-registration helper
@@ -68,7 +69,7 @@ The modules directory contains both the module infrastructure and the actual mod
 - `module_loader.py` - Module discovery and lifecycle management
 
 **Actual Modules:**
-- **comms**: Meshtastic radio bridge for Atlas Command communication
+- **comms**: Multi-transport comms (wifi direct + Meshtastic)
 - **operations**: Message routing, heartbeat, and asset registration
 
 These modules are automatically discovered and available to all OS implementations. You can also create your own modules in a `modules/` directory relative to your config file, which will override shared modules with the same name.
@@ -157,8 +158,16 @@ Modules are configured via `config.json`:
   "modules": {
     "comms": {
       "enabled": true,
+      "enabled_methods": ["wifi", "meshtastic"],
       "simulated": false,
-      "gateway_node_id": "!9e9f370c"
+      "gateway_node_id": "!9e9f370c",
+      "wifi": {
+        "connect_on_start": true,
+        "scan_public_networks": true,
+        "networks": [],
+        "interface": null,
+        "timeout_s": 10.0
+      }
     },
     "operations": {
       "enabled": true

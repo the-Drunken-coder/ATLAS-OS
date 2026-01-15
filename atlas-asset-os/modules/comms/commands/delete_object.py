@@ -1,0 +1,9 @@
+from __future__ import annotations
+
+from modules.comms.types import MeshtasticClient
+
+
+def delete_object(client: MeshtasticClient, object_id: str, *, timeout: float | None = None, retries: int | None = None):
+    if client is None:
+        raise RuntimeError("Meshtastic client is not initialized")
+    return client.delete_object(object_id=object_id, timeout=timeout, max_retries=retries)
