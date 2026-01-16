@@ -109,7 +109,11 @@ class OperationsManager(ModuleBase):
                         "comms.request",
                         {
                             "function": "checkin_entity",
-                            "args": {"entity_id": entity_id, **self._checkin_payload},
+                            "args": {
+                                "entity_id": entity_id,
+                                "status_filter": "pending,in_progress",
+                                **self._checkin_payload,
+                            },
                             "request_id": f"checkin-{int(now * 1000)}",
                         },
                     )
@@ -283,7 +287,35 @@ class OperationsManager(ModuleBase):
         command_param = parameters.get("command")
         if command_param:
             command = str(command_param)
+        elif components.get("command_name"):
+            command = str(components.get("command_name"))
         if command not in self._command_handlers:
+            # Attempt to notify the control plane that the task has failed due to an unknown command.
+            # Only mark the task as known after we have successfully published the fail_task request.
+            max_attempts = 3
+            for attempt in range(max_attempts):
+                try:
+                    self.bus.publish(
+                        "comms.request",
+                        {
+                            "function": "fail_task",
+                            "args": {
+                                "task_id": task_id,
+                                "error_message": "No handler registered for command",
+                            },
+                        },
+                    )
+                    self._known_task_ids.add(task_id)
+                    break
+                except Exception:
+                    LOGGER.exception(
+                        "Failed to publish fail_task for unknown command (task_id=%s), attempt %d/%d",
+                        task_id,
+                        attempt + 1,
+                        max_attempts,
+                    )
+                    if attempt < max_attempts - 1:
+                        time.sleep(1)
             return
         with self._command_lock:
             self._known_task_ids.add(task_id)
