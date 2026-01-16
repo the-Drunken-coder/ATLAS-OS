@@ -64,9 +64,9 @@ Dev-only priority list (not user config):
 **Bus Topics:**
 - Subscribe `commands.register` `{command, handler}`
 - Subscribe `commands.unregister` `{command}`
- 
+
 **Dependencies:** `comms`  
- 
+
 **Configuration:**
 ```json
 {

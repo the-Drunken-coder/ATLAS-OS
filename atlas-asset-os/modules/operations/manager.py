@@ -68,6 +68,7 @@ class OperationsManager(ModuleBase):
         self.bus.subscribe("commands.register", self._handle_command_register)
         self.bus.subscribe("commands.unregister", self._handle_command_unregister)
 
+
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
 
@@ -243,6 +244,7 @@ class OperationsManager(ModuleBase):
             return
         self._command_handlers.pop(str(command), None)
         self._publish_task_catalog()
+
 
     def _publish_task_catalog(self) -> None:
         asset_cfg = self.config.get("atlas", {}).get("asset", {}) if isinstance(self.config, dict) else {}
