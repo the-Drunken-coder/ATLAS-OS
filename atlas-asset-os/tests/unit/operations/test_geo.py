@@ -1,4 +1,3 @@
-import pytest
 from modules.operations.geo import haversine_meters
 
 

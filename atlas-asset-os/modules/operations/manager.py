@@ -332,7 +332,7 @@ class OperationsManager(ModuleBase):
         if not task_id:
             return
         if success:
-            args = {"task_id": task_id}
+            args: dict[str, Any] = {"task_id": task_id}
             if isinstance(result, dict):
                 args["result"] = result
             self.bus.publish("comms.request", {"function": "complete_task", "args": args})
