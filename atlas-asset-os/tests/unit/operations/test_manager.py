@@ -254,3 +254,393 @@ def test_registration_handles_failure():
         
         # Registration should be marked as incomplete
         assert manager._registration_complete is False
+
+
+def test_task_handling_enqueue_and_execute():
+    """Test that tasks are properly enqueued and executed."""
+    config = _base_config({
+        "enabled": True,
+        "heartbeat_interval_s": 30.0,
+        "checkin_interval_s": 30.0,
+    })
+    bus = MessageBus()
+    manager = OperationsManager(bus, config)
+    manager.start()
+    
+    # Track comms requests
+    comms_requests = []
+    bus.subscribe("comms.request", lambda d: comms_requests.append(d))
+    
+    # Register a command handler
+    executed_tasks = []
+    
+    def mock_handler(params):
+        executed_tasks.append(params)
+        return {"result": "success"}
+    
+    bus.publish("commands.register", {"command": "test_command", "handler": mock_handler})
+    time.sleep(0.1)
+    
+    # Simulate receiving a task from checkin response
+    manager._handle_comms_response({
+        "function": "checkin_entity",
+        "ok": True,
+        "result": {
+            "tasks": [
+                {
+                    "task_id": "task-123",
+                    "status": "pending",
+                    "components": {
+                        "parameters": {
+                            "command": "test_command",
+                            "param1": "value1"
+                        }
+                    }
+                }
+            ]
+        }
+    })
+    
+    # Wait for task to be executed (loop will call _maybe_dispatch_command)
+    time.sleep(1.5)
+    
+    # Verify handler was called
+    assert len(executed_tasks) == 1
+    assert executed_tasks[0]["param1"] == "value1"
+    
+    # Verify comms requests were made
+    start_requests = [r for r in comms_requests if r.get("function") == "start_task"]
+    complete_requests = [r for r in comms_requests if r.get("function") == "complete_task"]
+    
+    assert len(start_requests) == 1
+    assert start_requests[0]["args"]["task_id"] == "task-123"
+    assert len(complete_requests) == 1
+    assert complete_requests[0]["args"]["task_id"] == "task-123"
+    
+    manager.stop()
+
+
+def test_task_handling_duplicate_filtering():
+    """Test that duplicate tasks are filtered out."""
+    config = _base_config({
+        "enabled": True,
+        "heartbeat_interval_s": 30.0,
+        "checkin_interval_s": 30.0,
+    })
+    bus = MessageBus()
+    manager = OperationsManager(bus, config)
+    manager.start()
+    
+    executed_count = {"count": 0}
+    
+    def mock_handler(params):
+        executed_count["count"] += 1
+        return {}
+    
+    bus.publish("commands.register", {"command": "test_cmd", "handler": mock_handler})
+    time.sleep(0.1)
+    
+    # Send same task twice
+    task = {
+        "task_id": "task-456",
+        "status": "pending",
+        "components": {"parameters": {"command": "test_cmd"}}
+    }
+    
+    manager._handle_comms_response({
+        "function": "checkin_entity",
+        "ok": True,
+        "result": {"tasks": [task]}
+    })
+    
+    time.sleep(1.5)
+    
+    # Send same task again
+    manager._handle_comms_response({
+        "function": "checkin_entity",
+        "ok": True,
+        "result": {"tasks": [task]}
+    })
+    
+    time.sleep(1.5)
+    
+    # Should only execute once
+    assert executed_count["count"] == 1
+    
+    manager.stop()
+
+
+def test_task_handling_error_handling():
+    """Test that task errors are properly reported."""
+    config = _base_config({
+        "enabled": True,
+        "heartbeat_interval_s": 30.0,
+        "checkin_interval_s": 30.0,
+    })
+    bus = MessageBus()
+    manager = OperationsManager(bus, config)
+    manager.start()
+    
+    comms_requests = []
+    bus.subscribe("comms.request", lambda d: comms_requests.append(d))
+    
+    def failing_handler(params):
+        raise ValueError("Test error")
+    
+    bus.publish("commands.register", {"command": "fail_cmd", "handler": failing_handler})
+    time.sleep(0.1)
+    
+    manager._handle_comms_response({
+        "function": "checkin_entity",
+        "ok": True,
+        "result": {
+            "tasks": [{
+                "task_id": "task-789",
+                "status": "pending",
+                "components": {"parameters": {"command": "fail_cmd"}}
+            }]
+        }
+    })
+    
+    time.sleep(1.5)
+    
+    # Verify fail_task was called
+    fail_requests = [r for r in comms_requests if r.get("function") == "fail_task"]
+    assert len(fail_requests) == 1
+    assert fail_requests[0]["args"]["task_id"] == "task-789"
+    assert "Test error" in fail_requests[0]["args"]["error_message"]
+    
+    manager.stop()
+
+
+def test_track_broadcasting_distance_throttling():
+    """Test that track updates are throttled based on distance."""
+    config = _base_config({
+        "enabled": True,
+        "heartbeat_interval_s": 30.0,
+        "checkin_interval_s": 30.0,
+        "track_update_min_distance_m": 100.0,
+        "track_update_min_seconds": 0.5,  # Use shorter time for test
+    })
+    bus = MessageBus()
+    manager = OperationsManager(bus, config)
+    
+    comms_requests = []
+    bus.subscribe("comms.request", lambda d: comms_requests.append(d))
+    
+    # First track update - should broadcast
+    manager._handle_data_store_snapshot({
+        "request_id": "snap-1",
+        "snapshot": {
+            "tracks": {
+                "track-1": {
+                    "value": {"latitude": 40.0, "longitude": -74.0},
+                    "updated_at": time.time()
+                }
+            }
+        }
+    })
+    
+    time.sleep(0.6)  # Wait for time threshold
+    
+    # Second update with small distance change (< 100m) - should NOT broadcast
+    manager._handle_data_store_snapshot({
+        "request_id": "snap-2",
+        "snapshot": {
+            "tracks": {
+                "track-1": {
+                    "value": {"latitude": 40.0001, "longitude": -74.0},
+                    "updated_at": time.time()
+                }
+            }
+        }
+    })
+    
+    time.sleep(0.6)  # Wait for time threshold
+    
+    # Third update with large distance change (> 100m) - should broadcast
+    manager._handle_data_store_snapshot({
+        "request_id": "snap-3",
+        "snapshot": {
+            "tracks": {
+                "track-1": {
+                    "value": {"latitude": 40.001, "longitude": -74.0},
+                    "updated_at": time.time()
+                }
+            }
+        }
+    })
+    
+    time.sleep(0.1)
+    
+    # Count telemetry updates
+    telemetry_updates = [r for r in comms_requests if r.get("function") == "update_entity_telemetry"]
+    
+    # Should have 2 updates: first one and third one (second was throttled due to distance)
+    assert len(telemetry_updates) == 2
+
+
+def test_track_broadcasting_time_throttling():
+    """Test that track updates are throttled based on time."""
+    config = _base_config({
+        "enabled": True,
+        "heartbeat_interval_s": 30.0,
+        "checkin_interval_s": 30.0,
+        "track_update_min_distance_m": 100.0,
+        "track_update_min_seconds": 0.5,
+    })
+    bus = MessageBus()
+    manager = OperationsManager(bus, config)
+    
+    comms_requests = []
+    bus.subscribe("comms.request", lambda d: comms_requests.append(d))
+    
+    # First update
+    manager._handle_data_store_snapshot({
+        "request_id": "snap-1",
+        "snapshot": {
+            "tracks": {
+                "track-2": {
+                    "value": {"latitude": 40.0, "longitude": -74.0},
+                    "updated_at": time.time()
+                }
+            }
+        }
+    })
+    
+    time.sleep(0.1)
+    
+    # Second update immediately (large distance change but too soon) - should NOT broadcast
+    manager._handle_data_store_snapshot({
+        "request_id": "snap-2",
+        "snapshot": {
+            "tracks": {
+                "track-2": {
+                    "value": {"latitude": 40.01, "longitude": -74.0},
+                    "updated_at": time.time()
+                }
+            }
+        }
+    })
+    
+    time.sleep(0.5)
+    
+    # Third update after delay - should broadcast
+    manager._handle_data_store_snapshot({
+        "request_id": "snap-3",
+        "snapshot": {
+            "tracks": {
+                "track-2": {
+                    "value": {"latitude": 40.02, "longitude": -74.0},
+                    "updated_at": time.time()
+                }
+            }
+        }
+    })
+    
+    time.sleep(0.1)
+    
+    # Count telemetry updates
+    telemetry_updates = [r for r in comms_requests if r.get("function") == "update_entity_telemetry"]
+    
+    # Should have 2 updates: first one and third one
+    assert len(telemetry_updates) == 2
+
+
+def test_track_broadcasting_optional_fields():
+    """Test that track broadcasts include optional fields when present."""
+    config = _base_config({
+        "enabled": True,
+        "heartbeat_interval_s": 30.0,
+        "checkin_interval_s": 30.0,
+    })
+    bus = MessageBus()
+    manager = OperationsManager(bus, config)
+    
+    comms_requests = []
+    bus.subscribe("comms.request", lambda d: comms_requests.append(d))
+    
+    # Track with all optional fields
+    manager._handle_data_store_snapshot({
+        "request_id": "snap-1",
+        "snapshot": {
+            "tracks": {
+                "track-3": {
+                    "value": {
+                        "latitude": 40.0,
+                        "longitude": -74.0,
+                        "altitude_m": 100.5,
+                        "speed_m_s": 15.2,
+                        "heading_deg": 270.0
+                    },
+                    "updated_at": time.time()
+                }
+            }
+        }
+    })
+    
+    time.sleep(0.1)
+    
+    # Verify optional fields are included
+    telemetry_updates = [r for r in comms_requests if r.get("function") == "update_entity_telemetry"]
+    assert len(telemetry_updates) == 1
+    
+    args = telemetry_updates[0]["args"]
+    assert args["entity_id"] == "track-3"
+    assert args["latitude"] == 40.0
+    assert args["longitude"] == -74.0
+    assert args["altitude_m"] == 100.5
+    assert args["speed_m_s"] == 15.2
+    assert args["heading_deg"] == 270.0
+
+
+def test_track_broadcasting_handles_invalid_data():
+    """Test that track broadcasting handles invalid data gracefully."""
+    config = _base_config({
+        "enabled": True,
+        "heartbeat_interval_s": 30.0,
+        "checkin_interval_s": 30.0,
+    })
+    bus = MessageBus()
+    manager = OperationsManager(bus, config)
+    
+    comms_requests = []
+    bus.subscribe("comms.request", lambda d: comms_requests.append(d))
+    
+    # Invalid snapshot data
+    manager._handle_data_store_snapshot("invalid")
+    manager._handle_data_store_snapshot({"snapshot": "invalid"})
+    manager._handle_data_store_snapshot({"snapshot": {"tracks": "invalid"}})
+    
+    # Missing coordinates
+    manager._handle_data_store_snapshot({
+        "request_id": "snap-1",
+        "snapshot": {
+            "tracks": {
+                "track-4": {
+                    "value": {"latitude": 40.0},  # Missing longitude
+                    "updated_at": time.time()
+                }
+            }
+        }
+    })
+    
+    # Invalid coordinate types
+    manager._handle_data_store_snapshot({
+        "request_id": "snap-2",
+        "snapshot": {
+            "tracks": {
+                "track-5": {
+                    "value": {"latitude": "invalid", "longitude": -74.0},
+                    "updated_at": time.time()
+                }
+            }
+        }
+    })
+    
+    time.sleep(0.1)
+    
+    # No telemetry updates should have been sent
+    telemetry_updates = [r for r in comms_requests if r.get("function") == "update_entity_telemetry"]
+    assert len(telemetry_updates) == 0
+

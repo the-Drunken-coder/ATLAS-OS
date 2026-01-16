@@ -55,8 +55,15 @@ Dev-only priority list (not user config):
 - Asset self-registration on startup
 - Publish periodic heartbeat (default 30s)
 - Periodic Atlas Command check-ins (interval depends on comms method)
+- Periodic data store snapshot sync on the bus
+- Broadcast track telemetry updates when tracks move enough
+- Register and execute supported commands from enabled modules
 - Command/request/data/error message type classification
  - Forward commands to command handlers
+
+**Bus Topics:**
+- Subscribe `commands.register` `{command, handler}`
+- Subscribe `commands.unregister` `{command}`
  
 **Dependencies:** `comms`  
  
@@ -70,8 +77,11 @@ Dev-only priority list (not user config):
     "checkin_interval_wifi_s": 1.0,
     "checkin_interval_mesh_s": 15.0,
     "checkin_payload": {
-      "heading_deg": 0.0
-    }
+      "latitude": 0.0,
+      "longitude": 0.0
+    },
+    "track_update_min_distance_m": 25.0,
+    "track_update_min_seconds": 5.0
   }
 }
 ```
@@ -86,6 +96,7 @@ Dev-only priority list (not user config):
 - Load sensor worker plugins from config
 - Start/stop workers with the OS lifecycle
 - Publish analyzed outputs on `sensor.output`
+- Publish command intents on `sensor.command` for registered device commands
 
 **Dependencies:** None  
 
@@ -102,12 +113,52 @@ Dev-only priority list (not user config):
         "interval_s": 1.0,
         "bearing_deg": 0.0,
         "elevation_deg": 0.0,
-        "confidence": 0.5
+        "confidence": 0.5,
+        "commands": ["slew_turret"]
       }
     ]
   }
 }
 ```
+
+---
+
+### `data_store` - Data Store Manager
+**Version:** 1.0.0  
+**Purpose:** General-purpose in-memory store with optional persistence  
+
+**Capabilities:**
+- Store keyed records by namespace
+- Publish updates and snapshots on the bus
+- Optional JSON persistence to disk
+
+**Dependencies:** None  
+
+**Configuration:**
+```json
+{
+  "data_store": {
+    "enabled": true,
+    "persistence": {
+      "enabled": false,
+      "path": "~/.atlas_data_store.json",
+      "interval_s": 30.0,
+      "persist_on_change": false
+    }
+  }
+}
+```
+
+**Bus Topics:**
+- Publish `data_store.put` `{namespace, key, value, meta}`
+- Publish `data_store.get` `{namespace, key, request_id}`
+- Publish `data_store.list` `{namespace, request_id}`
+- Publish `data_store.delete` `{namespace, key}`
+- Publish `data_store.snapshot.request` `{namespace?, request_id}`
+- Subscribe `data_store.response` `{namespace, key?, keys?, record?, request_id}`
+- Subscribe `data_store.updated` `{namespace, key, record}`
+- Subscribe `data_store.deleted` `{namespace, key, record}`
+- Subscribe `data_store.snapshot` `{snapshot, request_id}`
 
 ---
 

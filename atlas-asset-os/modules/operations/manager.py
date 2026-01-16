@@ -1,8 +1,10 @@
 import logging
 import threading
 import time
-from typing import List, Optional
+from collections import deque
+from typing import Any, Callable, Deque, List, Optional
 
+from modules.operations.geo import haversine_meters
 
 # Module base is in the same modules/ directory
 from modules.module_base import ModuleBase  # noqa: E402
@@ -40,6 +42,19 @@ class OperationsManager(ModuleBase):
         self._registration_complete = False
         self._checkin_payload_logged = False
         self._checkin_waiting_logged = False
+        self._data_store_sync_interval_s = 1.0
+        self._last_data_store_sync = 0.0
+        self._last_snapshot_request_id: Optional[str] = None
+        self._track_namespace = str(ops_cfg.get("track_namespace", "tracks"))
+        self._track_update_min_distance_m = float(ops_cfg.get("track_update_min_distance_m", 25.0))
+        self._track_update_min_seconds = float(ops_cfg.get("track_update_min_seconds", 5.0))
+        self._track_last_sent: dict[str, dict[str, float]] = {}
+        self._data_store_namespaces = [self._track_namespace]
+        self._command_handlers: dict[str, Callable[[dict[str, Any]], Any]] = {}
+        self._command_queue: Deque[dict[str, Any]] = deque()
+        self._command_lock = threading.Lock()
+        self._active_command: Optional[dict[str, Any]] = None
+        self._known_task_ids: set[str] = set()
 
     def start(self) -> None:
         self._logger.info("Starting Operations Manager")
@@ -48,6 +63,10 @@ class OperationsManager(ModuleBase):
         # Subscribe to bus events
         self.bus.subscribe("comms.message_received", self._handle_comms_message)
         self.bus.subscribe("comms.method_changed", self._handle_method_changed)
+        self.bus.subscribe("data_store.snapshot", self._handle_data_store_snapshot)
+        self.bus.subscribe("comms.response", self._handle_comms_response)
+        self.bus.subscribe("commands.register", self._handle_command_register)
+        self.bus.subscribe("commands.unregister", self._handle_command_unregister)
 
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
@@ -95,6 +114,24 @@ class OperationsManager(ModuleBase):
                     )
                     self._last_checkin = now
 
+            if self._data_store_sync_interval_s > 0 and now - self._last_data_store_sync >= self._data_store_sync_interval_s:
+                self._last_data_store_sync = now
+                request_id = f"data-store-{int(now * 1000)}"
+                self._last_snapshot_request_id = request_id
+                namespaces = self._data_store_namespaces
+                if namespaces:
+                    for namespace in namespaces:
+                        self.bus.publish(
+                            "data_store.snapshot.request",
+                            {"namespace": namespace, "request_id": request_id},
+                        )
+                else:
+                    self.bus.publish(
+                        "data_store.snapshot.request",
+                        {"request_id": request_id},
+                    )
+
+            self._maybe_dispatch_command()
             time.sleep(1)
 
     def _handle_comms_message(self, data):
@@ -172,6 +209,141 @@ class OperationsManager(ModuleBase):
                 },
             )
 
+    def _handle_comms_response(self, data: dict) -> None:
+        if not isinstance(data, dict):
+            return
+        if data.get("function") != "checkin_entity":
+            return
+        if not data.get("ok"):
+            return
+        result = data.get("result")
+        if not isinstance(result, dict):
+            return
+        tasks = result.get("tasks")
+        if not isinstance(tasks, list):
+            return
+        for task in tasks:
+            self._enqueue_task(task)
+
+    def _handle_command_register(self, data: dict) -> None:
+        if not isinstance(data, dict):
+            return
+        command = data.get("command")
+        handler = data.get("handler")
+        if not command or not callable(handler):
+            return
+        self._command_handlers[str(command)] = handler
+        self._publish_task_catalog()
+
+    def _handle_command_unregister(self, data: dict) -> None:
+        if not isinstance(data, dict):
+            return
+        command = data.get("command")
+        if not command:
+            return
+        self._command_handlers.pop(str(command), None)
+        self._publish_task_catalog()
+
+    def _publish_task_catalog(self) -> None:
+        asset_cfg = self.config.get("atlas", {}).get("asset", {}) if isinstance(self.config, dict) else {}
+        entity_id = asset_cfg.get("id")
+        if not entity_id:
+            return
+        supported = sorted(self._command_handlers.keys())
+        components = {"task_catalog": {"supported_tasks": supported}}
+        self.bus.publish(
+            "comms.request",
+            {
+                "function": "update_entity",
+                "args": {"entity_id": entity_id, "components": components},
+                "request_id": f"task-catalog-{int(time.time() * 1000)}",
+            },
+        )
+
+    def _enqueue_task(self, task: dict) -> None:
+        if not isinstance(task, dict):
+            return
+        task_id = task.get("task_id")
+        if not task_id:
+            return
+        status = str(task.get("status", "pending")).lower()
+        if status != "pending":
+            return
+        task_id = str(task_id)
+        if task_id in self._known_task_ids:
+            return
+        # Use explicit command from parameters if provided, otherwise fall back to task_id
+        command = task_id
+        components_raw = task.get("components")
+        components = components_raw if isinstance(components_raw, dict) else {}
+        parameters_raw = components.get("parameters")
+        parameters = parameters_raw if isinstance(parameters_raw, dict) else {}
+        command_param = parameters.get("command")
+        if command_param:
+            command = str(command_param)
+        if command not in self._command_handlers:
+            return
+        with self._command_lock:
+            self._known_task_ids.add(task_id)
+            self._command_queue.append(
+                {"task_id": task_id, "command": command, "parameters": parameters}
+            )
+
+    def _maybe_dispatch_command(self) -> None:
+        with self._command_lock:
+            if self._active_command is not None:
+                return
+            if not self._command_queue:
+                return
+            task = self._command_queue.popleft()
+            self._active_command = task
+        threading.Thread(target=self._execute_command, args=(task,), daemon=True).start()
+
+    def _execute_command(self, task: dict) -> None:
+        task_id_raw = task.get("task_id")
+        task_id = str(task_id_raw) if task_id_raw is not None else None
+        command_raw = task.get("command")
+        command = str(command_raw) if command_raw is not None else ""
+        parameters_raw = task.get("parameters")
+        parameters: dict[str, Any] = parameters_raw if isinstance(parameters_raw, dict) else {}
+        handler = self._command_handlers.get(command)
+        if handler is None:
+            self._finalize_command(task_id, success=False, error="No handler registered")
+            return
+        self.bus.publish(
+            "comms.request",
+            {"function": "start_task", "args": {"task_id": task_id}},
+        )
+        try:
+            result = handler(parameters)
+        except Exception as exc:
+            self._finalize_command(task_id, success=False, error=str(exc))
+            return
+        self._finalize_command(task_id, success=True, result=result)
+
+    def _finalize_command(
+        self,
+        task_id: Optional[str],
+        *,
+        success: bool,
+        result: Any = None,
+        error: Optional[str] = None,
+    ) -> None:
+        if not task_id:
+            return
+        if success:
+            args = {"task_id": task_id}
+            if isinstance(result, dict):
+                args["result"] = result
+            self.bus.publish("comms.request", {"function": "complete_task", "args": args})
+        else:
+            self.bus.publish(
+                "comms.request",
+                {"function": "fail_task", "args": {"task_id": task_id, "error_message": error}},
+            )
+        with self._command_lock:
+            self._active_command = None
+
     def _handle_method_changed(self, data):
         if not isinstance(data, dict):
             return
@@ -211,3 +383,66 @@ class OperationsManager(ModuleBase):
                 self._registration_complete = register_asset(self.bus, self.config)
 
             threading.Thread(target=_register, daemon=True).start()
+
+    def _handle_data_store_snapshot(self, data):
+        if not isinstance(data, dict):
+            return
+        request_id = data.get("request_id")
+        if self._last_snapshot_request_id and request_id != self._last_snapshot_request_id:
+            return
+        snapshot = data.get("snapshot")
+        if not isinstance(snapshot, dict):
+            return
+        self._sync_tracks_from_snapshot(snapshot)
+        self.bus.publish(
+            "operations.data_store_sync",
+            {"snapshot": snapshot, "request_id": request_id, "timestamp": time.time()},
+        )
+
+    def _sync_tracks_from_snapshot(self, snapshot):
+        tracks = snapshot.get(self._track_namespace)
+        if not isinstance(tracks, dict):
+            return
+        for track_id, record in tracks.items():
+            if not isinstance(record, dict):
+                continue
+            value = record.get("value")
+            if not isinstance(value, dict):
+                continue
+            lat = value.get("latitude")
+            lon = value.get("longitude")
+            if lat is None or lon is None:
+                continue
+            try:
+                lat_val = float(lat)
+                lon_val = float(lon)
+            except (TypeError, ValueError):
+                continue
+            self._maybe_broadcast_track(str(track_id), value, lat_val, lon_val)
+
+    def _maybe_broadcast_track(self, track_id: str, value: dict, lat: float, lon: float) -> None:
+        now = time.time()
+        last = self._track_last_sent.get(track_id)
+        if last:
+            elapsed = now - last.get("ts", 0.0)
+            if elapsed < self._track_update_min_seconds:
+                return
+            distance = haversine_meters(lat, lon, last.get("lat", lat), last.get("lon", lon))
+            if distance < self._track_update_min_distance_m:
+                return
+        args = {"entity_id": track_id, "latitude": lat, "longitude": lon}
+        if value.get("altitude_m") is not None:
+            args["altitude_m"] = value.get("altitude_m")
+        if value.get("speed_m_s") is not None:
+            args["speed_m_s"] = value.get("speed_m_s")
+        if value.get("heading_deg") is not None:
+            args["heading_deg"] = value.get("heading_deg")
+        self.bus.publish(
+            "comms.request",
+            {
+                "function": "update_entity_telemetry",
+                "args": args,
+                "request_id": f"track-{track_id}-{int(now * 1000)}",
+            },
+        )
+        self._track_last_sent[track_id] = {"lat": lat, "lon": lon, "ts": now}

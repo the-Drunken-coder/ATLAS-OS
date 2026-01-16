@@ -271,3 +271,217 @@ def test_sensor_worker_prevents_double_start():
     assert worker._thread is first_thread
     
     worker.stop()
+
+
+def test_device_command_registration(monkeypatch):
+    """Test that device commands are registered correctly."""
+    from modules.sensors import workers
+    
+    # Temporarily add mock worker to registry
+    original_registry = workers.WORKER_REGISTRY.copy()
+    workers.WORKER_REGISTRY["mock"] = MockSensorWorker
+    
+    try:
+        config = _base_config({
+            "enabled": True,
+            "devices": [
+                {
+                    "id": "sensor-1",
+                    "type": "mock",
+                    "commands": ["take_photo", "set_mode"]
+                }
+            ]
+        })
+        bus = MessageBus()
+        manager = SensorsManager(bus, config)
+        
+        # Track command registrations
+        registered_commands = []
+        bus.subscribe("commands.register", lambda d: registered_commands.append(d))
+        
+        manager.start()
+        time.sleep(0.1)
+        
+        # Verify commands were registered
+        assert len(registered_commands) == 2
+        command_names = {c["command"] for c in registered_commands}
+        assert command_names == {"take_photo", "set_mode"}
+        
+        # Verify handlers are callable
+        for cmd in registered_commands:
+            assert callable(cmd["handler"])
+        
+        manager.stop()
+    finally:
+        workers.WORKER_REGISTRY.clear()
+        workers.WORKER_REGISTRY.update(original_registry)
+
+
+def test_device_command_handler_invocation(monkeypatch):
+    """Test that command handlers publish sensor commands correctly."""
+    from modules.sensors import workers
+    
+    # Temporarily add mock worker to registry
+    original_registry = workers.WORKER_REGISTRY.copy()
+    workers.WORKER_REGISTRY["mock"] = MockSensorWorker
+    
+    try:
+        config = _base_config({
+            "enabled": True,
+            "devices": [
+                {
+                    "id": "sensor-1",
+                    "type": "mock",
+                    "commands": ["take_photo"]
+                }
+            ]
+        })
+        bus = MessageBus()
+        manager = SensorsManager(bus, config)
+        
+        # Track sensor commands
+        sensor_commands = []
+        bus.subscribe("sensor.command", lambda d: sensor_commands.append(d))
+        
+        # Track registered handlers
+        registered_handlers = []
+        bus.subscribe("commands.register", lambda d: registered_handlers.append(d))
+        
+        manager.start()
+        time.sleep(0.1)
+        
+        # Invoke the handler
+        handler = registered_handlers[0]["handler"]
+        result = handler({"param1": "value1"})
+        
+        time.sleep(0.1)
+        
+        # Verify sensor command was published
+        assert len(sensor_commands) == 1
+        assert sensor_commands[0]["sensor_id"] == "sensor-1"
+        assert sensor_commands[0]["command"] == "take_photo"
+        assert sensor_commands[0]["parameters"]["param1"] == "value1"
+        
+        # Verify handler returned success
+        assert result["status"] == "sent"
+        
+        manager.stop()
+    finally:
+        workers.WORKER_REGISTRY.clear()
+        workers.WORKER_REGISTRY.update(original_registry)
+
+
+def test_device_command_unregistration(monkeypatch):
+    """Test that device commands are unregistered on stop."""
+    from modules.sensors import workers
+    
+    # Temporarily add mock worker to registry
+    original_registry = workers.WORKER_REGISTRY.copy()
+    workers.WORKER_REGISTRY["mock"] = MockSensorWorker
+    
+    try:
+        config = _base_config({
+            "enabled": True,
+            "devices": [
+                {
+                    "id": "sensor-1",
+                    "type": "mock",
+                    "commands": ["cmd1", "cmd2"]
+                }
+            ]
+        })
+        bus = MessageBus()
+        manager = SensorsManager(bus, config)
+        
+        # Track unregistrations
+        unregistered_commands = []
+        bus.subscribe("commands.unregister", lambda d: unregistered_commands.append(d))
+        
+        manager.start()
+        time.sleep(0.1)
+        
+        manager.stop()
+        time.sleep(0.1)
+        
+        # Verify commands were unregistered
+        assert len(unregistered_commands) == 2
+        unregistered_names = {c["command"] for c in unregistered_commands}
+        assert unregistered_names == {"cmd1", "cmd2"}
+    finally:
+        workers.WORKER_REGISTRY.clear()
+        workers.WORKER_REGISTRY.update(original_registry)
+
+
+def test_device_command_registration_with_no_commands(monkeypatch):
+    """Test that devices without commands don't cause issues."""
+    from modules.sensors import workers
+    
+    # Temporarily add mock worker to registry
+    original_registry = workers.WORKER_REGISTRY.copy()
+    workers.WORKER_REGISTRY["mock"] = MockSensorWorker
+    
+    try:
+        config = _base_config({
+            "enabled": True,
+            "devices": [
+                {
+                    "id": "sensor-1",
+                    "type": "mock"
+                    # No commands specified
+                }
+            ]
+        })
+        bus = MessageBus()
+        manager = SensorsManager(bus, config)
+        
+        registered_commands = []
+        bus.subscribe("commands.register", lambda d: registered_commands.append(d))
+        
+        manager.start()
+        time.sleep(0.1)
+        
+        # No commands should be registered
+        assert len(registered_commands) == 0
+        
+        manager.stop()
+    finally:
+        workers.WORKER_REGISTRY.clear()
+        workers.WORKER_REGISTRY.update(original_registry)
+
+
+def test_device_command_registration_with_invalid_commands(monkeypatch):
+    """Test that invalid command configurations are handled gracefully."""
+    from modules.sensors import workers
+    
+    # Temporarily add mock worker to registry
+    original_registry = workers.WORKER_REGISTRY.copy()
+    workers.WORKER_REGISTRY["mock"] = MockSensorWorker
+    
+    try:
+        config = _base_config({
+            "enabled": True,
+            "devices": [
+                {
+                    "id": "sensor-1",
+                    "type": "mock",
+                    "commands": "invalid"  # Should be a list
+                }
+            ]
+        })
+        bus = MessageBus()
+        manager = SensorsManager(bus, config)
+        
+        registered_commands = []
+        bus.subscribe("commands.register", lambda d: registered_commands.append(d))
+        
+        manager.start()
+        time.sleep(0.1)
+        
+        # No commands should be registered
+        assert len(registered_commands) == 0
+        
+        manager.stop()
+    finally:
+        workers.WORKER_REGISTRY.clear()
+        workers.WORKER_REGISTRY.update(original_registry)
+

@@ -36,11 +36,22 @@
         "latitude": 0.0,
         "longitude": 0.0
       },
+      "track_update_min_distance_m": 25.0,
+      "track_update_min_seconds": 5.0,
       "_comment": "Set checkin_interval_s to 0 or negative to disable check-ins. Method-specific intervals (checkin_interval_wifi_s, checkin_interval_mesh_s) override the default when that method is active."
     },
     "sensors": {
       "enabled": false,
       "devices": []
+    },
+    "data_store": {
+      "enabled": true,
+      "persistence": {
+        "enabled": false,
+        "path": "~/.atlas_data_store.json",
+        "interval_s": 30.0,
+        "persist_on_change": false
+      }
     }
   }
 }
