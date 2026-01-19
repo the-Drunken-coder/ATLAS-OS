@@ -15,11 +15,11 @@ LOGGER = logging.getLogger("modules.operations")
 
 class OperationsManager(ModuleBase):
     """Operations manager for message routing and heartbeat."""
-    
+
     MODULE_NAME = "operations"
     MODULE_VERSION = "1.0.0"
     DEPENDENCIES: List[str] = ["comms"]  # Depends on comms module
-    
+
     def __init__(self, bus, config):
         super().__init__(bus, config)
         self._thread: Optional[threading.Thread] = None
@@ -31,7 +31,9 @@ class OperationsManager(ModuleBase):
         raw_payload = ops_cfg.get("checkin_payload") or {}
         allowed_keys = {"latitude", "longitude", "altitude_m", "speed_m_s", "heading_deg"}
         self._checkin_payload = {
-            key: value for key, value in raw_payload.items() if key in allowed_keys and value is not None
+            key: value
+            for key, value in raw_payload.items()
+            if key in allowed_keys and value is not None
         }
         self._last_heartbeat = 0.0
         self._last_checkin = 0.0
@@ -59,7 +61,7 @@ class OperationsManager(ModuleBase):
     def start(self) -> None:
         self._logger.info("Starting Operations Manager")
         self.running = True
-        
+
         # Subscribe to bus events
         self.bus.subscribe("comms.message_received", self._handle_comms_message)
         self.bus.subscribe("comms.method_changed", self._handle_method_changed)
@@ -67,7 +69,6 @@ class OperationsManager(ModuleBase):
         self.bus.subscribe("comms.response", self._handle_comms_response)
         self.bus.subscribe("commands.register", self._handle_command_register)
         self.bus.subscribe("commands.unregister", self._handle_command_unregister)
-
 
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
@@ -89,8 +90,15 @@ class OperationsManager(ModuleBase):
                 self._last_heartbeat = now
 
             # Periodic check-in to Atlas Command (disabled if interval <= 0)
-            if self._current_checkin_interval_s > 0 and now - self._last_checkin >= self._current_checkin_interval_s:
-                asset_cfg = self.config.get("atlas", {}).get("asset", {}) if isinstance(self.config, dict) else {}
+            if (
+                self._current_checkin_interval_s > 0
+                and now - self._last_checkin >= self._current_checkin_interval_s
+            ):
+                asset_cfg = (
+                    self.config.get("atlas", {}).get("asset", {})
+                    if isinstance(self.config, dict)
+                    else {}
+                )
                 entity_id = asset_cfg.get("id")
                 if not entity_id:
                     if not self._checkin_disabled_logged:
@@ -102,7 +110,9 @@ class OperationsManager(ModuleBase):
                         self._checkin_waiting_logged = True
                 elif not self._checkin_payload:
                     if not self._checkin_payload_logged:
-                        self._logger.warning("Check-in disabled: operations.checkin_payload is empty")
+                        self._logger.warning(
+                            "Check-in disabled: operations.checkin_payload is empty"
+                        )
                         self._checkin_payload_logged = True
                 else:
                     self.bus.publish(
@@ -119,7 +129,10 @@ class OperationsManager(ModuleBase):
                     )
                     self._last_checkin = now
 
-            if self._data_store_sync_interval_s > 0 and now - self._last_data_store_sync >= self._data_store_sync_interval_s:
+            if (
+                self._data_store_sync_interval_s > 0
+                and now - self._last_data_store_sync >= self._data_store_sync_interval_s
+            ):
                 self._last_data_store_sync = now
                 request_id = f"data-store-{int(now * 1000)}"
                 self._last_snapshot_request_id = request_id
@@ -144,14 +157,14 @@ class OperationsManager(ModuleBase):
         if not data or not isinstance(data, dict):
             self._logger.warning("Invalid message structure received: %s", data)
             return
-        
+
         # Extract message fields
         msg_type = data.get("type", "unknown")
         command = data.get("command", "unknown")
         message_id = data.get("message_id", "unknown")
         msg_data = data.get("data", {})
         sender = data.get("sender")
-        
+
         self._logger.info(
             "Received message via comms: sender=%s, type=%s, command=%s, id=%s",
             sender,
@@ -159,7 +172,7 @@ class OperationsManager(ModuleBase):
             command,
             message_id[:8] if message_id != "unknown" else "unknown",
         )
-        
+
         # Route message to appropriate topic based on type
         if msg_type == "request":
             # Incoming command/request
@@ -249,9 +262,10 @@ class OperationsManager(ModuleBase):
         self._command_handlers.pop(str(command), None)
         self._publish_task_catalog()
 
-
     def _publish_task_catalog(self) -> None:
-        asset_cfg = self.config.get("atlas", {}).get("asset", {}) if isinstance(self.config, dict) else {}
+        asset_cfg = (
+            self.config.get("atlas", {}).get("asset", {}) if isinstance(self.config, dict) else {}
+        )
         entity_id = asset_cfg.get("id")
         if not entity_id:
             return
@@ -273,7 +287,7 @@ class OperationsManager(ModuleBase):
         if not task_id:
             return
         status = str(task.get("status", "pending")).lower()
-        if status != "pending":
+        if status not in {"pending", "in_progress"}:
             return
         task_id = str(task_id)
         if task_id in self._known_task_ids:
@@ -320,7 +334,12 @@ class OperationsManager(ModuleBase):
         with self._command_lock:
             self._known_task_ids.add(task_id)
             self._command_queue.append(
-                {"task_id": task_id, "command": command, "parameters": parameters}
+                {
+                    "task_id": task_id,
+                    "command": command,
+                    "parameters": parameters,
+                    "skip_start": status == "in_progress",
+                }
             )
 
     def _maybe_dispatch_command(self) -> None:
@@ -344,10 +363,11 @@ class OperationsManager(ModuleBase):
         if handler is None:
             self._finalize_command(task_id, success=False, error="No handler registered")
             return
-        self.bus.publish(
-            "comms.request",
-            {"function": "start_task", "args": {"task_id": task_id}},
-        )
+        if not task.get("skip_start"):
+            self.bus.publish(
+                "comms.request",
+                {"function": "start_task", "args": {"task_id": task_id}},
+            )
         try:
             result = handler(parameters)
         except Exception as exc:
@@ -384,7 +404,7 @@ class OperationsManager(ModuleBase):
         method = data.get("method")
         if not method or method == self._current_method:
             return
-        
+
         self._current_method = method
         if method == "wifi":
             self._current_checkin_interval_s = self._checkin_interval_wifi_s
@@ -392,18 +412,18 @@ class OperationsManager(ModuleBase):
             self._current_checkin_interval_s = self._checkin_interval_mesh_s
         else:
             self._current_checkin_interval_s = self._checkin_interval_default_s
-        
+
         # Calculate appropriate next check-in time based on elapsed time and new interval
         now = time.time()
         elapsed_since_last = now - self._last_checkin
-        
+
         # If the new interval is shorter and we've already exceeded it, check in immediately
         # Otherwise, preserve timing to avoid redundant check-ins
         if self._current_checkin_interval_s < elapsed_since_last:
             # Switching to faster method and already past the interval
             self._last_checkin = now - self._current_checkin_interval_s
         # else: keep _last_checkin as-is to maintain check-in cadence
-        
+
         self._logger.info(
             "Comms method set to %s; check-in interval %.1fs",
             method,

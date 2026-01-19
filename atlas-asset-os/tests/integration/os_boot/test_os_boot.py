@@ -73,7 +73,12 @@ class TestOSBoot:
                 # Run briefly
                 time.sleep(0.1)
             finally:
-                os_manager.shutdown()
+                try:
+                    os_manager.shutdown()
+                except SystemExit:
+                    # OSManager.shutdown() may raise SystemExit when stopping the process/event loop;
+                    # this is expected in tests and is intentionally ignored.
+                    pass
         
         boot_thread = threading.Thread(target=run_os, daemon=True)
         boot_thread.start()
@@ -91,3 +96,5 @@ class TestOSBoot:
         operations_module = os_manager.module_loader.get_module("operations")
         assert comms_module.running is True
         assert operations_module.running is True
+
+        boot_thread.join(timeout=1.0)
