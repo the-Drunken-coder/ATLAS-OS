@@ -14,9 +14,23 @@ except Exception:  # pragma: no cover - optional dependency for wifi transport
 
 LOGGER = logging.getLogger("modules.comms.wifi")
 
+# Try to import shared test environment detection utility
+try:
+    from framework.utils import is_test_env as _is_test_env_impl
+except ImportError:
+    # Fallback if framework.utils is not available
+    def _is_test_env_impl() -> bool:
+        return bool(os.getenv("PYTEST_CURRENT_TEST") or os.getenv("ATLAS_TEST_MODE"))
+
 # Prefer the in-repo atlas_asset_http_client_python for dev use.
 _ROOT = Path(__file__).resolve().parents[5]
-_CLIENT_SRC = _ROOT / "Atlas_Command" / "connection_packages" / "atlas_asset_http_client_python" / "src"
+_CLIENT_SRC = (
+    _ROOT
+    / "Atlas_Command"
+    / "connection_packages"
+    / "atlas_asset_http_client_python"
+    / "src"
+)
 if str(_CLIENT_SRC) not in sys.path:
     sys.path.insert(0, str(_CLIENT_SRC))
 
@@ -44,13 +58,15 @@ def _connect_with_windows(ssid: str, interface: Optional[str]) -> bool:
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if result.returncode == 0:
         return True
-    LOGGER.warning("WiFi connect failed for %s: %s", ssid, (result.stderr or result.stdout).strip())
+    LOGGER.warning(
+        "WiFi connect failed for %s: %s", ssid, (result.stderr or result.stdout).strip()
+    )
     return False
 
 
 def _connect_with_nmcli(ssid: str, password: Optional[str]) -> bool:
     """Connect to WiFi network using nmcli.
-    
+
     Note: nmcli doesn't support reading passwords from stdin or files directly.
     Environment variables are used as a mitigation, though they're still visible
     to processes running as the same user. For production use, consider using
@@ -73,23 +89,29 @@ def _connect_with_nmcli(ssid: str, password: Optional[str]) -> bool:
             capture_output=True,
             text=True,
             check=False,
-            env=env
+            env=env,
         )
     else:
         # When no password, use list form which is safe from command injection
         # as args are passed directly to nmcli without shell interpretation
         cmd = ["nmcli", "dev", "wifi", "connect", ssid]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=False, env=env)
-    
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, check=False, env=env
+        )
+
     if result.returncode == 0:
         return True
-    LOGGER.warning("WiFi connect failed for %s: %s", ssid, (result.stderr or result.stdout).strip())
+    LOGGER.warning(
+        "WiFi connect failed for %s: %s", ssid, (result.stderr or result.stdout).strip()
+    )
     return False
 
 
-def _connect_with_networksetup(ssid: str, password: Optional[str], interface: Optional[str]) -> bool:
+def _connect_with_networksetup(
+    ssid: str, password: Optional[str], interface: Optional[str]
+) -> bool:
     """Connect to WiFi network using networksetup (macOS).
-    
+
     Note: networksetup doesn't support reading passwords from stdin or files.
     Environment variables are used as a mitigation, though they're still visible
     to processes running as the same user.
@@ -97,7 +119,7 @@ def _connect_with_networksetup(ssid: str, password: Optional[str], interface: Op
     if not interface:
         LOGGER.warning("WiFi connect skipped for %s: no interface configured", ssid)
         return False
-    
+
     env = os.environ.copy()
     if password:
         # Store password in environment variable to avoid command-line exposure
@@ -112,23 +134,30 @@ def _connect_with_networksetup(ssid: str, password: Optional[str], interface: Op
             capture_output=True,
             text=True,
             check=False,
-            env=env
+            env=env,
         )
     else:
         # When no password, use list form which is safe from command injection
         # as args are passed directly to networksetup without shell interpretation
         cmd = ["networksetup", "-setairportnetwork", interface, ssid]
-        result = subprocess.run(cmd, capture_output=True, text=True, check=False, env=env)
-    
+        result = subprocess.run(
+            cmd, capture_output=True, text=True, check=False, env=env
+        )
+
     if result.returncode == 0:
         return True
-    LOGGER.warning("WiFi connect failed for %s: %s", ssid, (result.stderr or result.stdout).strip())
+    LOGGER.warning(
+        "WiFi connect failed for %s: %s", ssid, (result.stderr or result.stdout).strip()
+    )
     return False
 
 
 def _current_ssid_windows() -> Optional[str]:
     result = subprocess.run(
-        ["netsh", "wlan", "show", "interfaces"], capture_output=True, text=True, check=False
+        ["netsh", "wlan", "show", "interfaces"],
+        capture_output=True,
+        text=True,
+        check=False,
     )
     if result.returncode != 0:
         return None
@@ -188,7 +217,9 @@ def get_current_ssid(interface: Optional[str]) -> Optional[str]:
 BAD_SSIDS: set[str] = set()
 
 
-def _try_connect_networks(networks: Iterable[Dict[str, str]], interface: Optional[str]) -> bool:
+def _try_connect_networks(
+    networks: Iterable[Dict[str, str]], interface: Optional[str]
+) -> bool:
     platform = sys.platform
     for entry in networks:
         ssid = (entry.get("ssid") or "").strip()
@@ -213,7 +244,9 @@ def _try_connect_networks(networks: Iterable[Dict[str, str]], interface: Optiona
 
 
 def _disconnect_windows() -> None:
-    subprocess.run(["netsh", "wlan", "disconnect"], capture_output=True, text=True, check=False)
+    subprocess.run(
+        ["netsh", "wlan", "disconnect"], capture_output=True, text=True, check=False
+    )
 
 
 def _disconnect_linux(interface: Optional[str]) -> None:
@@ -313,7 +346,9 @@ def _scan_open_networks_macos() -> list[str]:
     )
     if not airport.exists():
         return []
-    result = subprocess.run([str(airport), "-s"], capture_output=True, text=True, check=False)
+    result = subprocess.run(
+        [str(airport), "-s"], capture_output=True, text=True, check=False
+    )
     if result.returncode != 0:
         return []
     ssids: list[str] = []
@@ -386,7 +421,9 @@ class WifiApiClient:
         self._timeout = timeout
 
     async def _with_client(self, method: str, *args: Any, **kwargs: Any) -> Any:
-        async with AtlasCommandHttpClient(self._base_url, token=self._token, timeout=self._timeout) as client:
+        async with AtlasCommandHttpClient(
+            self._base_url, token=self._token, timeout=self._timeout
+        ) as client:
             func = getattr(client, method)
             return await func(*args, **kwargs)
 
@@ -396,7 +433,9 @@ class WifiApiClient:
         kwargs.pop("retries", None)
         return _run_async(self._with_client(method, *args, **kwargs))
 
-    def health_check(self, *, timeout: float | None = None, max_retries: int | None = None):
+    def health_check(
+        self, *, timeout: float | None = None, max_retries: int | None = None
+    ):
         _ = max_retries
         request_timeout = timeout or self._timeout
         if httpx is None:
@@ -405,7 +444,13 @@ class WifiApiClient:
         response.raise_for_status()
         return response.json() if response.content else {"status": "ok"}
 
-    def test_echo(self, message: Any = "ping", *, timeout: float | None = None, max_retries: int | None = None):
+    def test_echo(
+        self,
+        message: Any = "ping",
+        *,
+        timeout: float | None = None,
+        max_retries: int | None = None,
+    ):
         # timeout and max_retries are accepted for API compatibility with meshtastic client
         # but are not used for the simple echo test
         _ = timeout
@@ -473,6 +518,26 @@ class WifiApiClient:
         raise AttributeError(f"{type(self).__name__} has no attribute {name}")
 
 
+def _is_test_env() -> bool:
+    """
+    Return True when running under automated tests.
+
+    This helper is intentionally only used to guard operations that mutate the
+    host network configuration (for example, connecting to or disconnecting from
+    Wi-Fi networks). Other code paths that perform network I/O (such as HTTP
+    requests) are expected to be controlled via test-time mocking rather than
+    this environment flag.
+
+    Detects test environments via:
+    - PYTEST_CURRENT_TEST: Set by pytest during test execution
+    - ATLAS_TEST_MODE: Can be set manually for test scenarios
+
+    Returns:
+        bool: True if running in a test environment, False otherwise
+    """
+    return _is_test_env_impl()
+
+
 def build_wifi_client(
     *,
     base_url: str,
@@ -486,16 +551,21 @@ def build_wifi_client(
 
     networks = wifi_config.get("networks") or []
     connect_on_start = bool(wifi_config.get("connect_on_start", True))
+    timeout = float(wifi_config.get("timeout_s", 10.0))
+    if _is_test_env() and not wifi_config.get("allow_network_changes_in_tests", False):
+        LOGGER.info("WiFi transport running in test mode; skipping connect/disconnect.")
+        return WifiApiClient(base_url, token=api_token, timeout=timeout)
     interface = wifi_config.get("interface")
     scan_public = bool(wifi_config.get("scan_public_networks", True))
-    timeout = float(wifi_config.get("timeout_s", 10.0))
 
     current_ssid = get_current_ssid(interface)
     if current_ssid:
         if _verify_connectivity(base_url, timeout):
             LOGGER.info("WiFi already connected to %s; skipping connect", current_ssid)
             return WifiApiClient(base_url, token=api_token, timeout=timeout)
-        LOGGER.warning("WiFi connected to %s but no connectivity; disconnecting", current_ssid)
+        LOGGER.warning(
+            "WiFi connected to %s but no connectivity; disconnecting", current_ssid
+        )
         mark_bad_ssid(current_ssid)
         disconnect_current(interface)
 

@@ -30,41 +30,40 @@ TEST_CONFIG = {
         "asset": {
             "id": "test-asset-001",
             "name": "Test Asset",
-            "model_id": "test-asset"
-        }
+            "model_id": "test-asset",
+        },
     },
     "modules": {
         "comms": {
             "enabled": True,
             "simulated": True,
-            "gateway_node_id": "!test123"
+            "gateway_node_id": "!test123",
+            "enabled_methods": ["meshtastic"],
         },
-        "operations": {
-            "enabled": True
-        }
-    }
+        "operations": {"enabled": True},
+    },
 }
 
 
 class TestOSBoot:
     """Integration test for full OS boot sequence."""
-    
+
     @pytest.fixture
     def os_manager(self):
         """Create OS manager with test config."""
         return OSManager(config=TEST_CONFIG)
-    
+
     def test_os_boot_sequence(self, os_manager):
         """Test full OS boot sequence end-to-end."""
         boot_complete = threading.Event()
         boot_data = {}
-        
+
         def on_boot_complete(data):
             boot_data.update(data)
             boot_complete.set()
-        
+
         os_manager.bus.subscribe("os.boot_complete", on_boot_complete)
-        
+
         # Start OS in a thread
         def run_os():
             try:
@@ -79,18 +78,18 @@ class TestOSBoot:
                     # OSManager.shutdown() may raise SystemExit when stopping the process/event loop;
                     # this is expected in tests and is intentionally ignored.
                     pass
-        
+
         boot_thread = threading.Thread(target=run_os, daemon=True)
         boot_thread.start()
-        
+
         # Wait for boot complete signal
         assert boot_complete.wait(timeout=5.0), "Boot did not complete in time"
         assert "ts" in boot_data
-        
+
         # Verify modules are running
         assert os_manager.module_loader.get_module("comms") is not None
         assert os_manager.module_loader.get_module("operations") is not None
-        
+
         # Verify modules are actually running
         comms_module = os_manager.module_loader.get_module("comms")
         operations_module = os_manager.module_loader.get_module("operations")

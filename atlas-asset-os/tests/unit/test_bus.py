@@ -10,11 +10,13 @@ if str(_FRAMEWORK_DIR) not in sys.path:
 
 from framework.bus import MessageBus  # noqa: E402
 
+
 def test_bus_initialization():
     """Verify bus initializes in a running state with no subscribers."""
     bus = MessageBus()
     assert bus._running is True
     assert bus._subscribers == {}
+
 
 def test_bus_subscribe_publish():
     """Verify basic subscribe and publish functionality."""
@@ -30,6 +32,7 @@ def test_bus_subscribe_publish():
     assert len(received_data) == 1
     assert received_data[0] == {"key": "value"}
 
+
 def test_bus_multiple_subscribers():
     """Verify multiple subscribers to the same topic all receive the message."""
     bus = MessageBus()
@@ -38,11 +41,12 @@ def test_bus_multiple_subscribers():
 
     bus.subscribe("test.topic", lambda d: received_a.append(d))
     bus.subscribe("test.topic", lambda d: received_b.append(d))
-    
+
     bus.publish("test.topic", "hello")
 
     assert received_a == ["hello"]
     assert received_b == ["hello"]
+
 
 def test_bus_handler_exception():
     """Verify that an exception in one handler does not prevent others from receiving."""
@@ -63,16 +67,18 @@ def test_bus_handler_exception():
 
     assert received_data == ["test"]
 
+
 def test_bus_publish_not_running():
     """Verify that publishing does nothing if the bus is not running."""
     bus = MessageBus()
     received_data = []
     bus.subscribe("test", lambda d: received_data.append(d))
-    
+
     bus.shutdown()
     bus.publish("test", "data")
 
     assert len(received_data) == 0
+
 
 def test_bus_publish_no_subscribers():
     """Verify that publishing to a topic with no subscribers works fine."""

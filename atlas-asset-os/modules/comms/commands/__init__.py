@@ -4,7 +4,9 @@ from pathlib import Path
 # Ensure local Meshtastic bridge source is importable for command wrappers.
 # Repo root is parents[4] for .../ATLAS_ASSET_OS/modules/comms/commands/__init__.py
 _ROOT = Path(__file__).resolve().parents[4]
-_BRIDGE_SRC = _ROOT / "Atlas_Command" / "connection_packages" / "atlas_meshtastic_bridge" / "src"
+_BRIDGE_SRC = (
+    _ROOT / "Atlas_Command" / "connection_packages" / "atlas_meshtastic_bridge" / "src"
+)
 if str(_BRIDGE_SRC) not in sys.path:
     sys.path.insert(0, str(_BRIDGE_SRC))
 

@@ -9,7 +9,9 @@ LOGGER = logging.getLogger("modules.comms.meshtastic")
 # Bridge imports (local source path wiring)
 # Repo root is parents[5] for .../ATLAS_ASSET_OS/modules/comms/transports/meshtastic/bridge.py
 _ROOT = Path(__file__).resolve().parents[5]
-_BRIDGE_SRC = _ROOT / "Atlas_Command" / "connection_packages" / "atlas_meshtastic_bridge" / "src"
+_BRIDGE_SRC = (
+    _ROOT / "Atlas_Command" / "connection_packages" / "atlas_meshtastic_bridge" / "src"
+)
 if str(_BRIDGE_SRC) not in sys.path:
     sys.path.insert(0, str(_BRIDGE_SRC))
 

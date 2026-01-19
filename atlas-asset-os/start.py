@@ -3,7 +3,7 @@
 
 Usage:
     python start.py [config_path]
-    
+
     If config_path is not provided, looks for config.json in the same folder as this script.
 """
 
@@ -29,17 +29,17 @@ def main():
     parser = argparse.ArgumentParser(description="Start ATLAS Asset OS")
     parser.add_argument("config", nargs="?", type=Path, help="Path to config.json file")
     args = parser.parse_args()
-    
+
     # Determine config path - use script's folder config by default
     if args.config:
         config_path = args.config
     else:
         config_path = _SCRIPT_DIR / "config.json"
-    
+
     if not config_path.exists():
         print(f"ERROR: config.json not found at {config_path}")
         sys.exit(1)
-    
+
     os_manager = OSManager(config_path=config_path)
     os_manager.run()
 

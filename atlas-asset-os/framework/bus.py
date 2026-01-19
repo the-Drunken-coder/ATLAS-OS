@@ -4,13 +4,15 @@ from typing import Dict, List, Callable, Any
 
 LOGGER = logging.getLogger("bus")
 
+
 class MessageBus:
     """
     A lightweight, thread-safe publish/subscribe message bus.
-    
-    Handlers are called synchronously by default to ensure ordering, 
+
+    Handlers are called synchronously by default to ensure ordering,
     but the bus itself is designed to be used across threads.
     """
+
     def __init__(self):
         self._subscribers: Dict[str, List[Callable[[Any], None]]] = {}
         self._lock = threading.RLock()
@@ -36,7 +38,9 @@ class MessageBus:
                         del self._subscribers[topic]
                 except ValueError:
                     # Handler not in list, ignore
-                    LOGGER.debug(f"Handler not subscribed to '{topic}', ignoring unsubscribe")
+                    LOGGER.debug(
+                        f"Handler not subscribed to '{topic}', ignoring unsubscribe"
+                    )
 
     def publish(self, topic: str, data: Any = None) -> None:
         """Publish data to a specific topic. Handlers are invoked immediately."""
@@ -44,8 +48,10 @@ class MessageBus:
             return
 
         with self._lock:
-            handlers = self._subscribers.get(topic, [])[:] # Copy list to avoid modification during iteration
-        
+            handlers = self._subscribers.get(topic, [])[
+                :
+            ]  # Copy list to avoid modification during iteration
+
         if not handlers:
             # LOGGER.debug(f"No subscribers for '{topic}'")
             return

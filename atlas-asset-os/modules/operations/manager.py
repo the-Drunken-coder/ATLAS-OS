@@ -25,11 +25,23 @@ class OperationsManager(ModuleBase):
         self._thread: Optional[threading.Thread] = None
         ops_cfg = self.get_module_config()
         self._heartbeat_interval_s = float(ops_cfg.get("heartbeat_interval_s", 30.0))
-        self._checkin_interval_default_s = float(ops_cfg.get("checkin_interval_s", 30.0))
-        self._checkin_interval_wifi_s = float(ops_cfg.get("checkin_interval_wifi_s", 1.0))
-        self._checkin_interval_mesh_s = float(ops_cfg.get("checkin_interval_mesh_s", 15.0))
+        self._checkin_interval_default_s = float(
+            ops_cfg.get("checkin_interval_s", 30.0)
+        )
+        self._checkin_interval_wifi_s = float(
+            ops_cfg.get("checkin_interval_wifi_s", 1.0)
+        )
+        self._checkin_interval_mesh_s = float(
+            ops_cfg.get("checkin_interval_mesh_s", 15.0)
+        )
         raw_payload = ops_cfg.get("checkin_payload") or {}
-        allowed_keys = {"latitude", "longitude", "altitude_m", "speed_m_s", "heading_deg"}
+        allowed_keys = {
+            "latitude",
+            "longitude",
+            "altitude_m",
+            "speed_m_s",
+            "heading_deg",
+        }
         self._checkin_payload = {
             key: value
             for key, value in raw_payload.items()
@@ -48,8 +60,12 @@ class OperationsManager(ModuleBase):
         self._last_data_store_sync = 0.0
         self._last_snapshot_request_id: Optional[str] = None
         self._track_namespace = str(ops_cfg.get("track_namespace", "tracks"))
-        self._track_update_min_distance_m = float(ops_cfg.get("track_update_min_distance_m", 25.0))
-        self._track_update_min_seconds = float(ops_cfg.get("track_update_min_seconds", 5.0))
+        self._track_update_min_distance_m = float(
+            ops_cfg.get("track_update_min_distance_m", 25.0)
+        )
+        self._track_update_min_seconds = float(
+            ops_cfg.get("track_update_min_seconds", 5.0)
+        )
         self._track_last_sent: dict[str, dict[str, float]] = {}
         self._data_store_namespaces = [self._track_namespace]
         self._command_handlers: dict[str, Callable[[dict[str, Any]], Any]] = {}
@@ -102,11 +118,15 @@ class OperationsManager(ModuleBase):
                 entity_id = asset_cfg.get("id")
                 if not entity_id:
                     if not self._checkin_disabled_logged:
-                        self._logger.warning("Check-in disabled: missing atlas.asset.id in config")
+                        self._logger.warning(
+                            "Check-in disabled: missing atlas.asset.id in config"
+                        )
                         self._checkin_disabled_logged = True
                 elif not self._registration_complete:
                     if not self._checkin_waiting_logged:
-                        self._logger.info("Check-in waiting for asset registration to complete")
+                        self._logger.info(
+                            "Check-in waiting for asset registration to complete"
+                        )
                         self._checkin_waiting_logged = True
                 elif not self._checkin_payload:
                     if not self._checkin_payload_logged:
@@ -264,7 +284,9 @@ class OperationsManager(ModuleBase):
 
     def _publish_task_catalog(self) -> None:
         asset_cfg = (
-            self.config.get("atlas", {}).get("asset", {}) if isinstance(self.config, dict) else {}
+            self.config.get("atlas", {}).get("asset", {})
+            if isinstance(self.config, dict)
+            else {}
         )
         entity_id = asset_cfg.get("id")
         if not entity_id:
@@ -350,7 +372,9 @@ class OperationsManager(ModuleBase):
                 return
             task = self._command_queue.popleft()
             self._active_command = task
-        threading.Thread(target=self._execute_command, args=(task,), daemon=True).start()
+        threading.Thread(
+            target=self._execute_command, args=(task,), daemon=True
+        ).start()
 
     def _execute_command(self, task: dict) -> None:
         task_id_raw = task.get("task_id")
@@ -358,10 +382,14 @@ class OperationsManager(ModuleBase):
         command_raw = task.get("command")
         command = str(command_raw) if command_raw is not None else ""
         parameters_raw = task.get("parameters")
-        parameters: dict[str, Any] = parameters_raw if isinstance(parameters_raw, dict) else {}
+        parameters: dict[str, Any] = (
+            parameters_raw if isinstance(parameters_raw, dict) else {}
+        )
         handler = self._command_handlers.get(command)
         if handler is None:
-            self._finalize_command(task_id, success=False, error="No handler registered")
+            self._finalize_command(
+                task_id, success=False, error="No handler registered"
+            )
             return
         if not task.get("skip_start"):
             self.bus.publish(
@@ -389,11 +417,16 @@ class OperationsManager(ModuleBase):
             args: dict[str, Any] = {"task_id": task_id}
             if isinstance(result, dict):
                 args["result"] = result
-            self.bus.publish("comms.request", {"function": "complete_task", "args": args})
+            self.bus.publish(
+                "comms.request", {"function": "complete_task", "args": args}
+            )
         else:
             self.bus.publish(
                 "comms.request",
-                {"function": "fail_task", "args": {"task_id": task_id, "error_message": error}},
+                {
+                    "function": "fail_task",
+                    "args": {"task_id": task_id, "error_message": error},
+                },
             )
         with self._command_lock:
             self._active_command = None
@@ -442,7 +475,10 @@ class OperationsManager(ModuleBase):
         if not isinstance(data, dict):
             return
         request_id = data.get("request_id")
-        if self._last_snapshot_request_id and request_id != self._last_snapshot_request_id:
+        if (
+            self._last_snapshot_request_id
+            and request_id != self._last_snapshot_request_id
+        ):
             return
         snapshot = data.get("snapshot")
         if not isinstance(snapshot, dict):
@@ -474,14 +510,18 @@ class OperationsManager(ModuleBase):
                 continue
             self._maybe_broadcast_track(str(track_id), value, lat_val, lon_val)
 
-    def _maybe_broadcast_track(self, track_id: str, value: dict, lat: float, lon: float) -> None:
+    def _maybe_broadcast_track(
+        self, track_id: str, value: dict, lat: float, lon: float
+    ) -> None:
         now = time.time()
         last = self._track_last_sent.get(track_id)
         if last:
             elapsed = now - last.get("ts", 0.0)
             if elapsed < self._track_update_min_seconds:
                 return
-            distance = haversine_meters(lat, lon, last.get("lat", lat), last.get("lon", lon))
+            distance = haversine_meters(
+                lat, lon, last.get("lat", lat), last.get("lon", lon)
+            )
             if distance < self._track_update_min_distance_m:
                 return
         args = {"entity_id": track_id, "latitude": lat, "longitude": lon}

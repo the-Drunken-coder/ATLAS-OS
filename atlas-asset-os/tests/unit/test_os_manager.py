@@ -23,52 +23,46 @@ TEST_CONFIG = {
         "asset": {
             "id": "test-asset-001",
             "name": "Test Asset",
-            "model_id": "test-asset"
-        }
+            "model_id": "test-asset",
+        },
     },
     "modules": {
-        "comms": {
-            "enabled": True,
-            "simulated": True,
-            "gateway_node_id": "!test123"
-        },
-        "operations": {
-            "enabled": True
-        }
-    }
+        "comms": {"enabled": True, "simulated": True, "gateway_node_id": "!test123"},
+        "operations": {"enabled": True},
+    },
 }
 
 
 class TestOSManager:
     """Unit tests for OSManager."""
-    
+
     @pytest.fixture
     def os_manager(self):
         """Create OS manager with test config."""
         return OSManager(config=TEST_CONFIG)
-    
+
     def test_config_loads(self, os_manager):
         """Test that config file loads correctly."""
         assert os_manager.config is not None
         assert "atlas" in os_manager.config
         assert "modules" in os_manager.config
         assert os_manager.config["atlas"]["asset"]["id"] == "test-asset-001"
-    
+
     def test_bus_created(self, os_manager):
         """Test that message bus is created."""
         assert os_manager.bus is not None
-    
+
     def test_module_loader_created(self, os_manager):
         """Test that module loader is created."""
         assert os_manager.module_loader is not None
-    
+
     def test_running_state(self, os_manager):
         """Test initial running state."""
         assert os_manager.running is True
-    
+
     def test_shutdown(self, os_manager):
         """Test shutdown method."""
-        # shutdown() calls sys.exit(0), so we need to catch SystemExit
-        with pytest.raises(SystemExit):
-            os_manager.shutdown()
+        # shutdown() should NOT call sys.exit(0) when running under pytest
+        # to avoid "Exception ignored in thread" warnings during test cleanup
+        os_manager.shutdown()
         assert os_manager.running is False

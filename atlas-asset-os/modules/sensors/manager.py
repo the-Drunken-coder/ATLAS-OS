@@ -25,7 +25,9 @@ class SensorsManager(ModuleBase):
         if isinstance(devices, list):
             self._devices = devices
         else:
-            LOGGER.warning("Sensors config missing devices list; got %s", type(devices).__name__)
+            LOGGER.warning(
+                "Sensors config missing devices list; got %s", type(devices).__name__
+            )
 
     def start(self) -> None:
         self._logger.info("Starting Sensors Manager")

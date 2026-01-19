@@ -5,7 +5,13 @@ from typing import Any
 from modules.comms.types import MeshtasticClient
 
 
-def echo(client: MeshtasticClient, message: Any = "ping", *, timeout: float | None = None, retries: int | None = None):
+def echo(
+    client: MeshtasticClient,
+    message: Any = "ping",
+    *,
+    timeout: float | None = None,
+    retries: int | None = None,
+):
     """Send an echo command via Meshtastic."""
     if client is None:
         raise RuntimeError("Meshtastic client is not initialized")

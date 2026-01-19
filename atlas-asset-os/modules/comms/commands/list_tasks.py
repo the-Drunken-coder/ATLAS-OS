@@ -16,4 +16,6 @@ def list_tasks(
     """List tasks via the Meshtastic gateway."""
     if client is None:
         raise RuntimeError("Meshtastic client is not initialized")
-    return client.list_tasks(status=status, limit=limit, timeout=timeout, max_retries=retries)
+    return client.list_tasks(
+        status=status, limit=limit, timeout=timeout, max_retries=retries
+    )

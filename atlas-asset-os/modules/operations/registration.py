@@ -61,7 +61,9 @@ def register_asset(bus, config: Dict[str, Any], timeout: float = 10.0) -> bool:
             LOGGER.info("Asset registration successful: %s (%s)", entity_id, alias)
         else:
             registration_result["error"] = data.get("error", "Unknown error")
-            LOGGER.warning("Asset registration failed: %s", registration_result["error"])
+            LOGGER.warning(
+                "Asset registration failed: %s", registration_result["error"]
+            )
 
         registration_event.set()
 
@@ -120,7 +122,9 @@ def register_asset(bus, config: Dict[str, Any], timeout: float = 10.0) -> bool:
                     return True
                 # If failed but not last attempt, continue to retry
                 if attempt < max_attempts - 1:
-                    LOGGER.debug("Registration attempt %d failed, will retry", attempt + 1)
+                    LOGGER.debug(
+                        "Registration attempt %d failed, will retry", attempt + 1
+                    )
                     continue
             else:
                 LOGGER.warning("Registration request timed out after %.1fs", timeout)

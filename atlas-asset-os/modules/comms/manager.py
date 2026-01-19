@@ -18,11 +18,11 @@ LOGGER = logging.getLogger("modules.comms")
 
 class CommsManager(ModuleBase):
     """Communications manager for Atlas Command connections."""
-    
+
     MODULE_NAME = "comms"
     MODULE_VERSION = "1.0.0"
     DEPENDENCIES: List[str] = []  # No dependencies, starts first
-    
+
     def __init__(self, bus, config):
         super().__init__(bus, config)
         self._thread: Optional[threading.Thread] = None
@@ -34,13 +34,15 @@ class CommsManager(ModuleBase):
         self.enabled_methods = self._resolve_enabled_methods(comms_cfg)
         self.priority_methods = self._load_priority_methods()
         self.wifi_config = comms_cfg.get("wifi", {})
-        
+
         # "auto" means auto-detect the radio port (same as None/null)
         radio_port_cfg = comms_cfg.get("radio_port")
         self.radio_port = None if radio_port_cfg in (None, "auto") else radio_port_cfg
-        
+
         self.mode = comms_cfg.get("mode") or "general"
-        self.spool_path = os.path.expanduser(comms_cfg.get("spool_path", "~/.baseplate_comm_spool.json"))
+        self.spool_path = os.path.expanduser(
+            comms_cfg.get("spool_path", "~/.baseplate_comm_spool.json")
+        )
 
         self.client: Optional[MeshtasticClient] = None
         self.functions: Dict[str, Callable[..., Any]] = {}
@@ -51,6 +53,8 @@ class CommsManager(ModuleBase):
         self._method_index = 0
         self._fallback_start_index: Optional[int] = None
         self._last_method: Optional[str] = None
+        self._last_status_key: Optional[tuple[Optional[str], bool]] = None
+        self._status_last_change_ts: Optional[float] = None
         self._last_wifi_check = 0.0
         self._wifi_check_interval = 5.0
         self._last_promotion_check = 0.0
@@ -65,14 +69,18 @@ class CommsManager(ModuleBase):
             return ["meshtastic"]
         try:
             payload = json.loads(config_path.read_text())
-            methods = payload.get("priority_methods") if isinstance(payload, dict) else None
+            methods = (
+                payload.get("priority_methods") if isinstance(payload, dict) else None
+            )
             if isinstance(methods, list) and methods:
                 return [str(m) for m in methods]
         except Exception as exc:
             LOGGER.warning("Failed to load comms priority config: %s", exc)
         return ["meshtastic"]
 
-    def _resolve_enabled_methods(self, comms_cfg: Dict[str, Any]) -> Optional[list[str]]:
+    def _resolve_enabled_methods(
+        self, comms_cfg: Dict[str, Any]
+    ) -> Optional[list[str]]:
         enabled = comms_cfg.get("enabled_methods") or comms_cfg.get("methods")
         if isinstance(enabled, list) and enabled:
             return [str(m) for m in enabled]
@@ -108,7 +116,9 @@ class CommsManager(ModuleBase):
         self._method_index = max(0, start_index)
 
         initialized = False
-        for idx, method in enumerate(self._method_sequence[start_index:], start=start_index):
+        for idx, method in enumerate(
+            self._method_sequence[start_index:], start=start_index
+        ):
             if method == "wifi":
                 initialized = self._init_wifi()
             elif method == "meshtastic":
@@ -143,16 +153,60 @@ class CommsManager(ModuleBase):
             "comms.method_changed",
             {"method": self.method, "timestamp": time.time()},
         )
+        self._publish_status()
+
+    def _build_status_payload(self, request_id: Optional[str] = None) -> dict[str, Any]:
+        transport: dict[str, Any] = {}
+        if self.method == "wifi":
+            transport = {
+                "interface": self.wifi_config.get("interface"),
+                "ssid": self.wifi_config.get("ssid"),
+            }
+        elif self.method == "meshtastic":
+            transport = {
+                "radio_port": self.radio_port,
+                "gateway_node_id": self.gateway_node_id,
+                "mode": self.mode,
+                "simulated": self.simulated,
+            }
+        # last_change_ts will be None initially until first status change
+        payload: dict[str, Any] = {
+            "method": self.method,
+            "connected": self.connected,
+            "last_change_ts": self._status_last_change_ts,
+            "transport": transport,
+            "timestamp": time.time(),
+        }
+        if request_id:
+            payload["request_id"] = request_id
+        return payload
+
+    def _publish_status(
+        self, *, force: bool = False, request_id: Optional[str] = None
+    ) -> None:
+        status_key = (self.method, self.connected)
+        changed = status_key != self._last_status_key
+        if changed:
+            self._status_last_change_ts = time.time()
+            self._last_status_key = status_key
+        if force or request_id or changed:
+            self.bus.publish(
+                "comms.status", self._build_status_payload(request_id=request_id)
+            )
 
     def _build_wifi_client(self):
-        atlas_cfg = self.config.get("atlas", {}) if isinstance(self.config, dict) else {}
+        atlas_cfg = (
+            self.config.get("atlas", {}) if isinstance(self.config, dict) else {}
+        )
         base_url = atlas_cfg.get("base_url")
         api_token = atlas_cfg.get("api_token")
 
         # Validate base_url before passing to build_wifi_client
         if not base_url or not isinstance(base_url, str) or not base_url.strip():
             LOGGER.error("WiFi comms requires a valid atlas.base_url in configuration")
-            raise RuntimeError("WiFi comms requires a valid atlas.base_url in configuration")
+            raise RuntimeError(
+                "WiFi comms requires a valid atlas.base_url in configuration"
+            )
 
         return build_wifi_client(
             base_url=base_url,
@@ -197,8 +251,10 @@ class CommsManager(ModuleBase):
         # Subscribe to outgoing requests if needed later
         self.bus.subscribe("comms.send_message", self._handle_send_request)
         self.bus.subscribe("comms.request", self._handle_bus_request)
+        self.bus.subscribe("comms.get_status", self._handle_get_status)
         self.bus.subscribe("os.boot_complete", self._handle_boot_complete)
 
+        self._publish_status(force=True)
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
 
@@ -208,7 +264,11 @@ class CommsManager(ModuleBase):
         if self._thread:
             self._thread.join(timeout=1.0)
         # Close radio if present
-        if self.method == "meshtastic" and self.client and hasattr(self.client.transport.radio, "close"):
+        if (
+            self.method == "meshtastic"
+            and self.client
+            and hasattr(self.client.transport.radio, "close")
+        ):
             try:
                 self.client.transport.radio.close()
             except Exception:
@@ -218,7 +278,7 @@ class CommsManager(ModuleBase):
         """Main comms loop - polls for incoming messages and handles reconnection."""
         consecutive_errors = 0
         max_consecutive_errors = 5
-        
+
         while self.running:
             if not self.client or not self.connected:
                 self._attempt_reconnection()
@@ -230,11 +290,15 @@ class CommsManager(ModuleBase):
                 if now - self._last_wifi_check >= self._wifi_check_interval:
                     self._last_wifi_check = now
                     try:
-                        if not self.client.is_connected(self.wifi_config.get("interface")):
+                        if not self.client.is_connected(
+                            self.wifi_config.get("interface")
+                        ):
                             self._handle_disconnection()
                             continue
                         if not self.client.has_connectivity():
-                            self.client.mark_bad_current(self.wifi_config.get("interface"))
+                            self.client.mark_bad_current(
+                                self.wifi_config.get("interface")
+                            )
                             self.client.disconnect(self.wifi_config.get("interface"))
                             self._handle_disconnection()
                             continue
@@ -257,7 +321,7 @@ class CommsManager(ModuleBase):
                 if self._should_promote():
                     self._promote_to_preferred()
                 continue
-            
+
             if self.method != "meshtastic":
                 time.sleep(1)
                 continue
@@ -265,7 +329,7 @@ class CommsManager(ModuleBase):
             try:
                 # Poll for incoming messages
                 sender, message = self.client.transport.receive_message(timeout=0.5)
-                
+
                 if message:
                     consecutive_errors = 0
                     # Publish received message to bus
@@ -294,39 +358,46 @@ class CommsManager(ModuleBase):
                             self.client.transport.process_outbox()
                         except Exception as exc:
                             LOGGER.debug("Error processing outbox: %s", exc)
-                            
+
             except Exception as exc:
                 consecutive_errors += 1
-                LOGGER.warning("Error receiving message (consecutive errors: %d): %s", consecutive_errors, exc)
-                
+                LOGGER.warning(
+                    "Error receiving message (consecutive errors: %d): %s",
+                    consecutive_errors,
+                    exc,
+                )
+
                 # If we hit too many consecutive errors, mark as disconnected
                 if consecutive_errors >= max_consecutive_errors:
-                    LOGGER.error("Too many consecutive errors, marking connection as lost")
+                    LOGGER.error(
+                        "Too many consecutive errors, marking connection as lost"
+                    )
                     self._handle_disconnection()
                     consecutive_errors = 0
                 else:
                     time.sleep(0.1)  # Brief pause before retry
-    
+
     def _handle_disconnection(self):
         """Handle transport disconnection."""
         if self.connected:
             self.connected = False
             self.bus.publish("comms.connection_lost", {"timestamp": time.time()})
+            self._publish_status()
             LOGGER.warning("Comms connection lost")
             next_index = self._method_index + 1
             if self._method_sequence and next_index < len(self._method_sequence):
                 self._fallback_start_index = next_index
             else:
                 self._fallback_start_index = 0
-    
+
     def _attempt_reconnection(self):
         """Attempt to reconnect to the radio with exponential backoff."""
         if not self.running:
             return
-        
+
         # Calculate exponential backoff delay (1s, 2s, 4s, 8s, ... up to max)
-        delay = min(2.0 ** self._reconnect_attempts, self._max_reconnect_delay)
-        
+        delay = min(2.0**self._reconnect_attempts, self._max_reconnect_delay)
+
         if self._reconnect_attempts == 0:
             LOGGER.info("Attempting to reconnect comms...")
         else:
@@ -336,24 +407,27 @@ class CommsManager(ModuleBase):
                 delay,
             )
             time.sleep(delay)
-        
+
         try:
             # Try to reinitialize the bridge
             start_index = self._fallback_start_index or 0
             self._init_bridge(start_index=start_index)
-            
+
             # If we successfully reconnected
             if self.client and self.connected:
                 if self._reconnect_attempts > 0:
                     LOGGER.info("Comms reconnection successful")
-                    self.bus.publish("comms.connection_restored", {"timestamp": time.time()})
+                    self.bus.publish(
+                        "comms.connection_restored", {"timestamp": time.time()}
+                    )
+                self._publish_status()
                 self._reconnect_attempts = 0
                 self._fallback_start_index = None
             else:
                 self._reconnect_attempts += 1
                 if self._fallback_start_index and self._fallback_start_index != 0:
                     self._fallback_start_index = 0
-                
+
         except Exception as exc:
             LOGGER.warning("Reconnection attempt failed: %s", exc)
             self._reconnect_attempts += 1
@@ -393,7 +467,9 @@ class CommsManager(ModuleBase):
                     "function": func_name,
                     "request_id": req_id,
                     "ok": True,
-                    "result": result.to_dict() if hasattr(result, "to_dict") else result,
+                    "result": (
+                        result.to_dict() if hasattr(result, "to_dict") else result
+                    ),
                     "elapsed": elapsed,
                 },
             )
@@ -415,7 +491,11 @@ class CommsManager(ModuleBase):
                                     "function": func_name,
                                     "request_id": req_id,
                                     "ok": True,
-                                    "result": result.to_dict() if hasattr(result, "to_dict") else result,
+                                    "result": (
+                                        result.to_dict()
+                                        if hasattr(result, "to_dict")
+                                        else result
+                                    ),
                                     "elapsed": elapsed,
                                 },
                             )
@@ -462,7 +542,11 @@ class CommsManager(ModuleBase):
                 return False
             if not wifi_client.is_connected(self.wifi_config.get("interface")):
                 return False
-            if self.method == "meshtastic" and self.client and hasattr(self.client.transport.radio, "close"):
+            if (
+                self.method == "meshtastic"
+                and self.client
+                and hasattr(self.client.transport.radio, "close")
+            ):
                 try:
                     self.client.transport.radio.close()
                 except Exception:
@@ -507,6 +591,12 @@ class CommsManager(ModuleBase):
             return
         with self._queue_lock:
             self._request_queue.append(data)
+
+    def _handle_get_status(self, data):
+        request_id = None
+        if isinstance(data, dict):
+            request_id = data.get("request_id")
+        self._publish_status(force=True, request_id=request_id)
 
     def _handle_boot_complete(self, _data):
         """Handle os.boot_complete event."""

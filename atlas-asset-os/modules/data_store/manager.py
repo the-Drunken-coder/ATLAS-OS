@@ -149,7 +149,10 @@ class DataStoreManager(ModuleBase):
         if not self._persist_enabled or not self._persist_path:
             return
         now = time.time()
-        if not self._persist_on_change and now - self._last_persist < self._persist_interval_s:
+        if (
+            not self._persist_on_change
+            and now - self._last_persist < self._persist_interval_s
+        ):
             return
         self._last_persist = now
         try:
