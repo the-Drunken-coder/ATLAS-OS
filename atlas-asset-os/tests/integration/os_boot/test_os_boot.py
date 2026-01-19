@@ -57,6 +57,7 @@ class TestOSBoot:
         """Test full OS boot sequence end-to-end."""
         boot_complete = threading.Event()
         boot_data = {}
+        thread_errors: list[BaseException] = []
 
         def on_boot_complete(data):
             boot_data.update(data)
@@ -71,6 +72,8 @@ class TestOSBoot:
                 os_manager.bus.publish("os.boot_complete", {"ts": time.time()})
                 # Run briefly
                 time.sleep(0.1)
+            except (Exception, SystemExit) as exc:
+                thread_errors.append(exc)
             finally:
                 try:
                     os_manager.shutdown()
@@ -96,4 +99,8 @@ class TestOSBoot:
         assert comms_module.running is True
         assert operations_module.running is True
 
-        boot_thread.join(timeout=1.0)
+        boot_thread.join(timeout=5.0)
+        if boot_thread.is_alive():
+            raise AssertionError("OS boot thread did not finish within timeout")
+        if thread_errors:
+            raise RuntimeError("OS boot thread failed") from thread_errors[0]
