@@ -53,5 +53,11 @@
         "persist_on_change": false
       }
     }
+  },
+  "bus_logging": {
+    "enabled": false,
+    "log_file": "~/.atlas_bus.log",
+    "max_bytes": 5242880,
+    "backup_count": 5
   }
 }

@@ -85,3 +85,42 @@ def test_bus_publish_no_subscribers():
     bus = MessageBus()
     # Should not raise any errors
     bus.publish("non.existent.topic", "some data")
+
+
+def test_bus_logging_records_events(tmp_path):
+    """Verify bus logging writes publish/subscribe events when enabled."""
+    log_file = tmp_path / "bus.log"
+    bus = MessageBus(logging_config={"enabled": True, "log_file": str(log_file)})
+
+    received = []
+
+    def handler(data):
+        received.append(data)
+
+    bus.subscribe("topic", handler)
+    bus.publish("topic", {"msg": 1})
+    bus.shutdown()
+
+    with open(log_file, "r", encoding="utf-8") as f:
+        contents = f.read()
+
+    assert "subscribe topic=topic" in contents
+    assert "publish topic=topic data={'msg': 1}" in contents
+
+
+def test_bus_logging_unsubscribe(tmp_path):
+    """Verify unsubscribe is logged when enabled."""
+    log_file = tmp_path / "bus_unsub.log"
+    bus = MessageBus(logging_config={"enabled": True, "log_file": str(log_file)})
+
+    def handler(data):
+        pass
+
+    bus.subscribe("topic", handler)
+    bus.unsubscribe("topic", handler)
+    bus.shutdown()
+
+    with open(log_file, "r", encoding="utf-8") as f:
+        contents = f.read()
+
+    assert "unsubscribe topic=topic" in contents

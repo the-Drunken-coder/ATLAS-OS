@@ -35,7 +35,6 @@ class OSManager:
             config: Optional config dict. If provided, takes precedence over config_path.
         """
         self.running = True
-        self.bus = MessageBus()
 
         if config is not None:
             # Use provided config dict directly
@@ -43,6 +42,13 @@ class OSManager:
             self.config.setdefault("_config_dir", Path.cwd())
         else:
             self.config = self._load_config(config_path)
+
+        bus_logging_config = (
+            self.config.get("bus_logging")
+            if isinstance(self.config.get("bus_logging"), dict)
+            else None
+        )
+        self.bus = MessageBus(logging_config=bus_logging_config)
 
         self.module_loader = ModuleLoader(
             self.bus, self.config, self._get_modules_dirs()
