@@ -1,5 +1,5 @@
 import logging
-from typing import Dict, List
+from typing import Any, Dict, List
 
 from modules.module_base import ModuleBase
 from modules.sensors.workers import WORKER_REGISTRY, SensorWorker
@@ -102,3 +102,34 @@ class SensorsManager(ModuleBase):
             return {"status": "sent"}
 
         return _handler
+
+    def system_check(self) -> Dict[str, Any]:
+        """
+        Run diagnostics on the sensors module.
+
+        Returns:
+            Dictionary with diagnostic results.
+        """
+        healthy = self.running
+
+        # Check worker health
+        worker_status = {}
+        for sensor_id, worker in self._workers.items():
+            worker_healthy = hasattr(worker, "running") and getattr(worker, "running", False)
+            worker_status[sensor_id] = {
+                "healthy": worker_healthy,
+                "type": type(worker).__name__,
+            }
+
+        # Overall health is module running AND all workers healthy
+        all_workers_healthy = all(w["healthy"] for w in worker_status.values()) if worker_status else True
+        overall_healthy = healthy and all_workers_healthy
+
+        result = {
+            "healthy": overall_healthy,
+            "status": "running" if healthy else "stopped",
+            "workers": worker_status,
+            "worker_count": len(self._workers),
+        }
+
+        return result

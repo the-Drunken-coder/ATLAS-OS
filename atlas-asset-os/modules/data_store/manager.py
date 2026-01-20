@@ -160,3 +160,25 @@ class DataStoreManager(ModuleBase):
             self._persist_path.write_text(json.dumps(self._store, indent=2))
         except Exception as exc:
             self._logger.warning("Failed to persist data store: %s", exc)
+
+    def system_check(self) -> Dict[str, Any]:
+        """
+        Run diagnostics on the data_store module.
+
+        Returns:
+            Dictionary with diagnostic results.
+        """
+        healthy = self.running
+
+        # Count total records
+        total_records = sum(len(bucket) for bucket in self._store.values())
+
+        result = {
+            "healthy": healthy,
+            "status": "running" if healthy else "stopped",
+            "namespaces": len(self._store),
+            "total_records": total_records,
+            "persistence_enabled": self._persist_enabled,
+        }
+
+        return result

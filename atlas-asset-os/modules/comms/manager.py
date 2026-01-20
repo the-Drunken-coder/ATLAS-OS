@@ -601,3 +601,27 @@ class CommsManager(ModuleBase):
     def _handle_boot_complete(self, _data):
         """Handle os.boot_complete event."""
         self._publish_method_change(force=True)
+
+    def system_check(self) -> Dict[str, Any]:
+        """
+        Run diagnostics on the comms module.
+
+        Returns:
+            Dictionary with diagnostic results.
+        """
+        healthy = (
+            self.running
+            and self._thread is not None
+            and self._thread.is_alive()
+            and self.connected
+        )
+
+        result = {
+            "healthy": healthy,
+            "status": "connected" if self.connected else "disconnected",
+            "method": self.method,
+            "simulated": self.simulated,
+            "queued_requests": len(self._request_queue),
+        }
+
+        return result

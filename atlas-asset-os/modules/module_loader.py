@@ -7,6 +7,7 @@ with automatic dependency ordering.
 import importlib
 import importlib.util
 import logging
+import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Type
 
@@ -271,3 +272,84 @@ class ModuleLoader:
     def list_modules(self) -> List[str]:
         """List all loaded module names."""
         return list(self._load_order)
+
+    def run_system_check(self, timeout_s: float = 5.0) -> Dict[str, Any]:
+        """
+        Run system check on all loaded modules.
+
+        Args:
+            timeout_s: Timeout in seconds for each module check
+
+        Returns:
+            Dictionary with check results for each module.
+            Format: {
+                "overall_healthy": bool,
+                "modules": {
+                    "module_name": {
+                        "healthy": bool,
+                        "status": str,
+                        "error": str (if check failed),
+                        ...additional module-specific data
+                    }
+                }
+            }
+        """
+        results: Dict[str, Any] = {}
+        overall_healthy = True
+
+        for name in self._load_order:
+            instance = self._module_instances.get(name)
+            if not instance:
+                results[name] = {
+                    "healthy": False,
+                    "status": "not_loaded",
+                }
+                overall_healthy = False
+                continue
+
+            # Run check in a separate thread with timeout
+            check_result = {"healthy": False, "status": "timeout"}
+
+            def _run_check():
+                nonlocal check_result
+                try:
+                    check_result = instance.system_check()
+                except Exception as e:
+                    LOGGER.exception("Error running system check for %s: %s", name, e)
+                    check_result = {
+                        "healthy": False,
+                        "status": "error",
+                        "error": str(e),
+                    }
+
+            thread = threading.Thread(target=_run_check, daemon=True)
+            thread.start()
+            thread.join(timeout=timeout_s)
+
+            if thread.is_alive():
+                # Timeout - treat as unhealthy
+                LOGGER.warning("System check for %s timed out after %.1fs", name, timeout_s)
+                check_result = {
+                    "healthy": False,
+                    "status": "timeout",
+                }
+
+            # Ensure result is a dict and has 'healthy' key
+            if not isinstance(check_result, dict):
+                LOGGER.warning("System check for %s returned non-dict: %s", name, type(check_result))
+                check_result = {
+                    "healthy": False,
+                    "status": "invalid_response",
+                }
+            if "healthy" not in check_result:
+                LOGGER.warning("System check for %s missing 'healthy' key", name)
+                check_result["healthy"] = False
+
+            results[name] = check_result
+            if not check_result.get("healthy"):
+                overall_healthy = False
+
+        return {
+            "overall_healthy": overall_healthy,
+            "modules": results,
+        }

@@ -6,6 +6,7 @@ import time
 import json
 import logging
 from pathlib import Path
+from typing import Any, Dict, Optional
 
 from framework.bus import MessageBus
 from framework.utils import is_test_env
@@ -46,6 +47,9 @@ class OSManager:
         self.module_loader = ModuleLoader(
             self.bus, self.config, self._get_modules_dirs()
         )
+
+        # Subscribe to system check requests
+        self.bus.subscribe("module_loader.system_check.request", self._handle_system_check_request)
 
     def _get_modules_dirs(self) -> list[Path]:
         """
@@ -174,3 +178,23 @@ class OSManager:
         # This prevents "Exception ignored in thread" warnings during test cleanup
         if not is_test_env() and threading.current_thread() is threading.main_thread():
             sys.exit(0)
+
+    def _handle_system_check_request(self, data: Optional[Dict[str, Any]]) -> None:
+        """
+        Handle system check requests from modules.
+
+        Runs system check on all modules and publishes results.
+        """
+        timeout_s = data.get("timeout_s", 5.0) if isinstance(data, dict) else 5.0
+        results = self.module_loader.run_system_check(timeout_s=timeout_s)
+        request_id = data.get("request_id") if isinstance(data, dict) else None
+
+        # Publish results
+        response = {
+            "results": results,
+            "timestamp": time.time(),
+        }
+        if request_id:
+            response["request_id"] = request_id
+
+        self.bus.publish("system.check.response", response)

@@ -2,7 +2,7 @@ import logging
 import threading
 import time
 from collections import deque
-from typing import Any, Callable, Deque, List, Optional
+from typing import Any, Callable, Deque, Dict, List, Optional
 
 from modules.operations.geo import haversine_meters
 
@@ -85,6 +85,7 @@ class OperationsManager(ModuleBase):
         self.bus.subscribe("comms.response", self._handle_comms_response)
         self.bus.subscribe("commands.register", self._handle_command_register)
         self.bus.subscribe("commands.unregister", self._handle_command_unregister)
+        self.bus.subscribe("system.check.request", self._handle_system_check_request)
 
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._thread.start()
@@ -540,3 +541,35 @@ class OperationsManager(ModuleBase):
             },
         )
         self._track_last_sent[track_id] = {"lat": lat, "lon": lon, "ts": now}
+
+    def _handle_system_check_request(self, data: dict) -> None:
+        """
+        Handle system check requests.
+
+        Publishes system.check.response with the results.
+        """
+        self._logger.info("Running system check")
+        # Publish request to get module loader to run checks
+        self.bus.publish("module_loader.system_check.request", data)
+
+    def system_check(self) -> Dict[str, Any]:
+        """
+        Run diagnostics on the operations module.
+
+        Returns:
+            Dictionary with diagnostic results.
+        """
+        # Check basic health
+        healthy = self.running and self._thread is not None and self._thread.is_alive()
+
+        result = {
+            "healthy": healthy,
+            "status": "running" if healthy else "not_running",
+            "heartbeat_interval_s": self._heartbeat_interval_s,
+            "checkin_interval_s": self._current_checkin_interval_s,
+            "registration_complete": self._registration_complete,
+            "active_command": self._active_command is not None,
+            "queued_commands": len(self._command_queue),
+        }
+
+        return result

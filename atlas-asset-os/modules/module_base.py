@@ -62,5 +62,23 @@ class ModuleBase(ABC):
         module_cfg = self.get_module_config()
         return module_cfg.get("enabled", True)
 
+    def system_check(self) -> Dict[str, Any]:
+        """
+        Run diagnostics on the module's internal systems.
+
+        Returns:
+            Dictionary with diagnostic results. Should contain at minimum:
+                - 'healthy': bool indicating if module is healthy
+                - 'status': str with status message (optional)
+                - Additional module-specific diagnostic data (optional)
+
+        Default implementation returns healthy if module is running.
+        Modules should override this to provide more specific diagnostics.
+        """
+        return {
+            "healthy": self.running,
+            "status": "running" if self.running else "stopped",
+        }
+
     def __repr__(self) -> str:
         return f"<{self.__class__.__name__} {self.MODULE_NAME}@{self.MODULE_VERSION}>"
