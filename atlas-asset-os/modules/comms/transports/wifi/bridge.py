@@ -14,19 +14,27 @@ except Exception:  # pragma: no cover - optional dependency for wifi transport
 
 LOGGER = logging.getLogger("modules.comms.wifi")
 
+
+def _find_repo_root(start: Path) -> Path:
+    """Walk up parents to locate the repo root (directory containing .git)."""
+    for ancestor in [start] + list(start.parents):
+        if (ancestor / ".git").exists():
+            return ancestor
+    return start
+
 # Try to import shared test environment detection utility
 try:
     from framework.utils import is_test_env as _is_test_env_impl
 except ImportError:
     # Fallback if framework.utils is not available
     def _is_test_env_impl() -> bool:
-        return bool(os.getenv("PYTEST_CURRENT_TEST") or os.getenv("ATLAS_TEST_MODE"))
+            return bool(os.getenv("PYTEST_CURRENT_TEST") or os.getenv("ATLAS_TEST_MODE"))
 
 # Prefer the in-repo atlas_asset_http_client_python for dev use.
-_ROOT = Path(__file__).resolve().parents[5]
+_ROOT = _find_repo_root(Path(__file__).resolve().parent)
 _CLIENT_SRC = (
     _ROOT
-    / "Atlas_Command"
+    / "Atlas_Client_SDKs"
     / "connection_packages"
     / "atlas_asset_http_client_python"
     / "src"

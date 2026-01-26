@@ -8,15 +8,37 @@ from datetime import datetime
 import threading
 
 # --- Path Setup to use LOCAL source code ---
-# We assume this OS is running from Atlas_Tool_OSs/Gateway_OS
-# And the source code is in Atlas_Command/connection_packages/...
+# We assume this OS is running from Atlas_Client_Systems/Atlas_Tool_OSs/Gateway_OS
+# And the source code is in Atlas_Client_SDKs/connection_packages/...
 
 CURRENT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = CURRENT_DIR.parents[1] # Up to ATLAS root
+
+
+def find_repo_root(start: Path) -> Path:
+    """Walk up parents to find the repo root (directory containing .git)."""
+    for ancestor in [start] + list(start.parents):
+        if (ancestor / ".git").exists():
+            return ancestor
+    return start
+
+
+REPO_ROOT = find_repo_root(CURRENT_DIR)
 
 # Paths to the local packages
-BRIDGE_SRC = REPO_ROOT / "Atlas_Command" / "connection_packages" / "atlas_meshtastic_bridge" / "src"
-HTTP_CLIENT_SRC = REPO_ROOT / "Atlas_Command" / "connection_packages" / "atlas_asset_http_client_python" / "src"
+BRIDGE_SRC = (
+    REPO_ROOT
+    / "Atlas_Client_SDKs"
+    / "connection_packages"
+    / "atlas_meshtastic_bridge"
+    / "src"
+)
+HTTP_CLIENT_SRC = (
+    REPO_ROOT
+    / "Atlas_Client_SDKs"
+    / "connection_packages"
+    / "atlas_asset_http_client_python"
+    / "src"
+)
 
 # Verify paths exist
 if not BRIDGE_SRC.exists():

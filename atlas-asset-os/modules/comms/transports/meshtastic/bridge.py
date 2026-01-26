@@ -6,11 +6,23 @@ from typing import Any, Dict, Optional
 
 LOGGER = logging.getLogger("modules.comms.meshtastic")
 
+
+def _find_repo_root(start: Path) -> Path:
+    """Walk up parents to locate the repo root (directory containing .git)."""
+    for ancestor in [start] + list(start.parents):
+        if (ancestor / ".git").exists():
+            return ancestor
+    return start
+
+
 # Bridge imports (local source path wiring)
-# Repo root is parents[5] for .../ATLAS_ASSET_OS/modules/comms/transports/meshtastic/bridge.py
-_ROOT = Path(__file__).resolve().parents[5]
+_ROOT = _find_repo_root(Path(__file__).resolve().parent)
 _BRIDGE_SRC = (
-    _ROOT / "Atlas_Command" / "connection_packages" / "atlas_meshtastic_bridge" / "src"
+    _ROOT
+    / "Atlas_Client_SDKs"
+    / "connection_packages"
+    / "atlas_meshtastic_bridge"
+    / "src"
 )
 if str(_BRIDGE_SRC) not in sys.path:
     sys.path.insert(0, str(_BRIDGE_SRC))

@@ -8,13 +8,13 @@ This document describes the system check functionality added to the ATLAS Asset 
 ### Core Components
 
 #### 1. ModuleBase Extension
-- **File**: `ATLAS_ASSET_OS/modules/module_base.py`
+- **File**: `Atlas_Client_Systems/ATLAS_ASSET_OS/modules/module_base.py`
 - **Change**: Added `system_check()` method
 - **Default Implementation**: Returns `{"healthy": self.running, "status": "running" if self.running else "stopped"}`
 - **Purpose**: Provides a consistent interface for all modules to report their health
 
 #### 2. ModuleLoader System Check
-- **File**: `ATLAS_ASSET_OS/modules/module_loader.py`
+- **File**: `Atlas_Client_Systems/ATLAS_ASSET_OS/modules/module_loader.py`
 - **Method**: `run_system_check(timeout_s: float = 5.0)`
 - **Features**:
   - Runs system check on all loaded modules
@@ -23,13 +23,13 @@ This document describes the system check functionality added to the ATLAS Asset 
   - Returns overall health status and per-module diagnostics
   
 #### 3. OSManager Integration
-- **File**: `ATLAS_ASSET_OS/framework/master.py`
+- **File**: `Atlas_Client_Systems/ATLAS_ASSET_OS/framework/master.py`
 - **Method**: `_handle_system_check_request(data: Optional[Dict[str, Any]])`
 - **Subscription**: Listens to `module_loader.system_check.request`
 - **Response**: Publishes to `system.check.response`
 
 #### 4. Operations Manager
-- **File**: `ATLAS_ASSET_OS/modules/operations/manager.py`
+- **File**: `Atlas_Client_Systems/ATLAS_ASSET_OS/modules/operations/manager.py`
 - **Subscription**: Listens to `system.check.request`
 - **Action**: Forwards request to module loader via `module_loader.system_check.request`
 - **Custom Diagnostics**: Reports heartbeat interval, checkin status, registration status, command queue
@@ -108,7 +108,7 @@ results = os_manager.module_loader.run_system_check(timeout_s=5.0)
 ## Testing
 
 ### Test Coverage
-- 8 new comprehensive tests in `ATLAS_ASSET_OS/tests/unit/test_system_check.py`
+- 8 new comprehensive tests in `Atlas_Client_Systems/ATLAS_ASSET_OS/tests/unit/test_system_check.py`
 - All 107 existing tests continue to pass
 - Tests cover:
   - Default ModuleBase implementation
@@ -122,18 +122,18 @@ results = os_manager.module_loader.run_system_check(timeout_s=5.0)
 ```bash
 # Run system check tests
 cd ATLAS
-python -m pytest ATLAS_ASSET_OS/tests/unit/test_system_check.py -v
+python -m pytest Atlas_Client_Systems/ATLAS_ASSET_OS/tests/unit/test_system_check.py -v
 
 # Run all Asset OS tests
-python -m pytest ATLAS_ASSET_OS/tests/unit/ -v
+python -m pytest Atlas_Client_Systems/ATLAS_ASSET_OS/tests/unit/ -v
 ```
 
 ## Demonstration
 
-A demonstration script is provided at `ATLAS_ASSET_OS/demo_system_check.py`:
+A demonstration script is provided at `Atlas_Client_Systems/ATLAS_ASSET_OS/demo_system_check.py`:
 
 ```bash
-cd ATLAS_ASSET_OS
+cd Atlas_Client_Systems/ATLAS_ASSET_OS
 python demo_system_check.py
 ```
 
@@ -163,15 +163,15 @@ Potential improvements (not implemented in this PR):
 
 ## Files Modified
 
-1. `ATLAS_ASSET_OS/modules/module_base.py` - Added system_check method
-2. `ATLAS_ASSET_OS/modules/module_loader.py` - Added run_system_check method
-3. `ATLAS_ASSET_OS/framework/master.py` - Added system check request handler
-4. `ATLAS_ASSET_OS/modules/operations/manager.py` - Added system check implementation and request handling
-5. `ATLAS_ASSET_OS/modules/comms/manager.py` - Added system check implementation
-6. `ATLAS_ASSET_OS/modules/sensors/manager.py` - Added system check implementation
-7. `ATLAS_ASSET_OS/modules/data_store/manager.py` - Added system check implementation
+1. `Atlas_Client_Systems/ATLAS_ASSET_OS/modules/module_base.py` - Added system_check method
+2. `Atlas_Client_Systems/ATLAS_ASSET_OS/modules/module_loader.py` - Added run_system_check method
+3. `Atlas_Client_Systems/ATLAS_ASSET_OS/framework/master.py` - Added system check request handler
+4. `Atlas_Client_Systems/ATLAS_ASSET_OS/modules/operations/manager.py` - Added system check implementation and request handling
+5. `Atlas_Client_Systems/ATLAS_ASSET_OS/modules/comms/manager.py` - Added system check implementation
+6. `Atlas_Client_Systems/ATLAS_ASSET_OS/modules/sensors/manager.py` - Added system check implementation
+7. `Atlas_Client_Systems/ATLAS_ASSET_OS/modules/data_store/manager.py` - Added system check implementation
 
 ## Files Added
 
-1. `ATLAS_ASSET_OS/tests/unit/test_system_check.py` - Comprehensive tests
-2. `ATLAS_ASSET_OS/demo_system_check.py` - Demonstration script
+1. `Atlas_Client_Systems/ATLAS_ASSET_OS/tests/unit/test_system_check.py` - Comprehensive tests
+2. `Atlas_Client_Systems/ATLAS_ASSET_OS/demo_system_check.py` - Demonstration script
