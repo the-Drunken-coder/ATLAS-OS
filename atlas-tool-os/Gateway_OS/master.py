@@ -64,13 +64,13 @@ except ImportError as e:
 
 try:
     from meshtastic import serial_interface, util as meshtastic_util  # type: ignore
-except Exception:
+except ImportError:
     serial_interface = None  # type: ignore
     meshtastic_util = None  # type: ignore
 
 try:
     from serial.tools import list_ports  # type: ignore
-except Exception:
+except ImportError:
     list_ports = None  # type: ignore
 
 
@@ -101,7 +101,8 @@ class MessageLogger:
             if len(json_str) > 500:
                 return json_str[:500] + "... (truncated)"
             return json_str
-        except Exception:
+        except (TypeError, ValueError):
+            # Handle non-serializable data gracefully
             return str(data)[:500]
     
     def log_received(self, sender: str, envelope):
@@ -347,8 +348,8 @@ def _patch_transport_for_logging():
                         _message_logger.log_chunk_sent(
                             chunk_id, chunk_seq, chunk_total, len(payload), destination
                         )
-                except Exception:
-                    pass  # Not a valid chunk, skip logging
+                except (ValueError, IndexError, ImportError):
+                    pass  # Not a valid chunk or module unavailable, skip logging
                 return original_send(destination, payload)
             
             def logged_radio_receive(timeout: float):
@@ -363,8 +364,8 @@ def _patch_transport_for_logging():
                             _message_logger.log_chunk_received(
                                 chunk_id, chunk_seq, chunk_total, len(payload), sender
                             )
-                    except Exception:
-                        pass  # Not a valid chunk, skip logging
+                    except (ValueError, IndexError, ImportError):
+                        pass  # Not a valid chunk or module unavailable, skip logging
                 return result
             
             radio_instance.send = logged_radio_send

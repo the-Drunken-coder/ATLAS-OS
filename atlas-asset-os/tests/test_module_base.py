@@ -12,7 +12,6 @@ class ConcreteModule:
     DEPENDENCIES = ["dep1", "dep2"]
 
     def __init__(self, bus, config):
-        from modules.module_base import ModuleBase
 
         # Copy ModuleBase behavior
         self.bus = bus
