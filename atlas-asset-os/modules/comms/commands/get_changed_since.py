@@ -8,7 +8,7 @@ from modules.comms.types import MeshtasticClient
 
 def get_changed_since(
     client: MeshtasticClient,
-    since: str | datetime,
+    timestamp: str | datetime,
     *,
     limit_per_type: Optional[int] = None,
     timeout: float | None = None,
@@ -16,9 +16,7 @@ def get_changed_since(
 ):
     if client is None:
         raise RuntimeError("Meshtastic client is not initialized")
-    return client.get_changed_since(
-        since=since,
-        limit_per_type=limit_per_type,
-        timeout=timeout,
-        max_retries=retries,
-    )
+    kwargs = {"timestamp": timestamp, "timeout": timeout, "max_retries": retries}
+    if limit_per_type is not None:
+        kwargs["limit_per_type"] = limit_per_type
+    return client.get_changed_since(**kwargs)

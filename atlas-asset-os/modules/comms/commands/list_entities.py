@@ -5,8 +5,8 @@ from modules.comms.types import MeshtasticClient
 
 def list_entities(
     client: MeshtasticClient,
-    limit: int = 5,
-    offset: int = 0,
+    limit: int | None = None,
+    offset: int | None = None,
     *,
     timeout: float | None = None,
     retries: int | None = None,
@@ -14,6 +14,9 @@ def list_entities(
     """List entities via the Meshtastic gateway."""
     if client is None:
         raise RuntimeError("Meshtastic client is not initialized")
-    return client.list_entities(
-        limit=limit, offset=offset, timeout=timeout, max_retries=retries
-    )
+    kwargs = {"timeout": timeout, "max_retries": retries}
+    if limit is not None:
+        kwargs["limit"] = limit
+    if offset is not None:
+        kwargs["offset"] = offset
+    return client.list_entities(**kwargs)

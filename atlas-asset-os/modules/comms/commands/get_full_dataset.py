@@ -16,10 +16,11 @@ def get_full_dataset(
 ):
     if client is None:
         raise RuntimeError("Meshtastic client is not initialized")
-    return client.get_full_dataset(
-        entity_limit=entity_limit,
-        task_limit=task_limit,
-        object_limit=object_limit,
-        timeout=timeout,
-        max_retries=retries,
-    )
+    kwargs = {"timeout": timeout, "max_retries": retries}
+    if entity_limit is not None:
+        kwargs["entity_limit"] = entity_limit
+    if task_limit is not None:
+        kwargs["task_limit"] = task_limit
+    if object_limit is not None:
+        kwargs["object_limit"] = object_limit
+    return client.get_full_dataset(**kwargs)

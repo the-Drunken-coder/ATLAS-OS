@@ -15,6 +15,7 @@ def complete_task(
 ):
     if client is None:
         raise RuntimeError("Meshtastic client is not initialized")
-    return client.complete_task(
-        task_id=task_id, result=result, timeout=timeout, max_retries=retries
-    )
+    kwargs = {"task_id": task_id, "timeout": timeout, "max_retries": retries}
+    if result is not None:
+        kwargs["result"] = result
+    return client.complete_task(**kwargs)

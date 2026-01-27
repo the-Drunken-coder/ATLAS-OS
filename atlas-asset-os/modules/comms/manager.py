@@ -156,7 +156,7 @@ class CommsManager(ModuleBase):
         self._publish_status()
 
     def _build_status_payload(self, request_id: Optional[str] = None) -> dict[str, Any]:
-        transport: dict[str, Any] = {}
+        transport: Optional[dict[str, Any]] = None
         if self.method == "wifi":
             transport = {
                 "interface": self.wifi_config.get("interface"),
@@ -169,6 +169,9 @@ class CommsManager(ModuleBase):
                 "mode": self.mode,
                 "simulated": self.simulated,
             }
+        # Avoid returning empty transport dictionaries to keep downstream comparisons simple
+        if transport and not any(transport.values()):
+            transport = None
         # last_change_ts will be None initially until first status change
         payload: dict[str, Any] = {
             "method": self.method,
@@ -271,8 +274,9 @@ class CommsManager(ModuleBase):
         ):
             try:
                 self.client.transport.radio.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                # Best-effort cleanup: log but do not raise during shutdown.
+                LOGGER.warning("Error while closing meshtastic radio: %s", exc, exc_info=True)
 
     def _loop(self):
         """Main comms loop - polls for incoming messages and handles reconnection."""
