@@ -1,5 +1,6 @@
 import json
 import logging
+import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -19,6 +20,7 @@ class DataStoreManager(ModuleBase):
     def __init__(self, bus, config):
         super().__init__(bus, config)
         self._store: Dict[str, Dict[str, Any]] = {}
+        self._lock = threading.Lock()
         self._persist_enabled = False
         self._persist_path: Optional[Path] = None
         self._persist_interval_s = 30.0
@@ -60,8 +62,9 @@ class DataStoreManager(ModuleBase):
         value = data.get("value")
         meta = data.get("meta") if isinstance(data.get("meta"), dict) else {}
         record = {"value": value, "meta": meta, "updated_at": time.time()}
-        bucket = self._store.setdefault(namespace, {})
-        bucket[str(key)] = record
+        with self._lock:
+            bucket = self._store.setdefault(namespace, {})
+            bucket[str(key)] = record
         self.bus.publish(
             "data_store.updated",
             {"namespace": namespace, "key": str(key), "record": record},
@@ -76,7 +79,8 @@ class DataStoreManager(ModuleBase):
         key = data.get("key")
         if not key:
             return
-        record = self._store.get(namespace, {}).get(str(key))
+        with self._lock:
+            record = self._store.get(namespace, {}).get(str(key))
         self.bus.publish(
             "data_store.response",
             {
@@ -95,9 +99,10 @@ class DataStoreManager(ModuleBase):
         if not key:
             return
         removed = None
-        bucket = self._store.get(namespace)
-        if bucket and str(key) in bucket:
-            removed = bucket.pop(str(key))
+        with self._lock:
+            bucket = self._store.get(namespace)
+            if bucket and str(key) in bucket:
+                removed = bucket.pop(str(key))
         self.bus.publish(
             "data_store.deleted",
             {"namespace": namespace, "key": str(key), "record": removed},
@@ -109,7 +114,8 @@ class DataStoreManager(ModuleBase):
         if not isinstance(data, dict):
             return
         namespace = str(data.get("namespace", "default"))
-        keys = list(self._store.get(namespace, {}).keys())
+        with self._lock:
+            keys = list(self._store.get(namespace, {}).keys())
         self.bus.publish(
             "data_store.response",
             {
@@ -123,10 +129,11 @@ class DataStoreManager(ModuleBase):
         if not isinstance(data, dict):
             return
         namespace = data.get("namespace")
-        if namespace:
-            snapshot = {str(namespace): self._store.get(str(namespace), {}).copy()}
-        else:
-            snapshot = {name: bucket.copy() for name, bucket in self._store.items()}
+        with self._lock:
+            if namespace:
+                snapshot = {str(namespace): self._store.get(str(namespace), {}).copy()}
+            else:
+                snapshot = {name: bucket.copy() for name, bucket in self._store.items()}
         self.bus.publish(
             "data_store.snapshot",
             {"snapshot": snapshot, "request_id": data.get("request_id")},
@@ -140,7 +147,8 @@ class DataStoreManager(ModuleBase):
         try:
             payload = json.loads(self._persist_path.read_text())
             if isinstance(payload, dict):
-                self._store = payload
+                with self._lock:
+                    self._store = payload
                 self._logger.info("Loaded data store from %s", self._persist_path)
         except Exception as exc:
             self._logger.warning("Failed to load data store: %s", exc)
@@ -157,7 +165,9 @@ class DataStoreManager(ModuleBase):
         self._last_persist = now
         try:
             self._persist_path.parent.mkdir(parents=True, exist_ok=True)
-            self._persist_path.write_text(json.dumps(self._store, indent=2))
+            with self._lock:
+                data = json.dumps(self._store, indent=2)
+            self._persist_path.write_text(data)
         except Exception as exc:
             self._logger.warning("Failed to persist data store: %s", exc)
 
@@ -171,12 +181,14 @@ class DataStoreManager(ModuleBase):
         healthy = self.running
 
         # Count total records
-        total_records = sum(len(bucket) for bucket in self._store.values())
+        with self._lock:
+            total_records = sum(len(bucket) for bucket in self._store.values())
+            num_namespaces = len(self._store)
 
         result = {
             "healthy": healthy,
             "status": "running" if healthy else "stopped",
-            "namespaces": len(self._store),
+            "namespaces": num_namespaces,
             "total_records": total_records,
             "persistence_enabled": self._persist_enabled,
         }

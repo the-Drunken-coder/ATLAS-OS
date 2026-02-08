@@ -11,7 +11,7 @@ def _base_config(ops_cfg: dict) -> dict:
             "api_token": None,
             "asset": {
                 "id": "test-asset-001",
-                "type": "digital",
+                "type": "asset",
                 "name": "Test Asset",
                 "model_id": "test-model",
             },
@@ -511,7 +511,7 @@ def test_track_broadcasting_distance_throttling():
 
     # Count telemetry updates
     telemetry_updates = [
-        r for r in comms_requests if r.get("function") == "update_entity_telemetry"
+        r for r in comms_requests if r.get("function") == "update_telemetry"
     ]
 
     # Should have 2 updates: first one and third one (second was throttled due to distance)
@@ -588,7 +588,7 @@ def test_track_broadcasting_time_throttling():
 
     # Count telemetry updates
     telemetry_updates = [
-        r for r in comms_requests if r.get("function") == "update_entity_telemetry"
+        r for r in comms_requests if r.get("function") == "update_telemetry"
     ]
 
     # Should have 2 updates: first one and third one
@@ -635,7 +635,7 @@ def test_track_broadcasting_optional_fields():
 
     # Verify optional fields are included
     telemetry_updates = [
-        r for r in comms_requests if r.get("function") == "update_entity_telemetry"
+        r for r in comms_requests if r.get("function") == "update_telemetry"
     ]
     assert len(telemetry_updates) == 1
 
@@ -702,6 +702,6 @@ def test_track_broadcasting_handles_invalid_data():
 
     # No telemetry updates should have been sent
     telemetry_updates = [
-        r for r in comms_requests if r.get("function") == "update_entity_telemetry"
+        r for r in comms_requests if r.get("function") == "update_telemetry"
     ]
     assert len(telemetry_updates) == 0

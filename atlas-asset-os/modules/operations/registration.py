@@ -1,7 +1,7 @@
 import logging
 import time
 import threading
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 LOGGER = logging.getLogger("modules.operations.registration")
 
@@ -46,6 +46,8 @@ def register_asset(bus, config: Dict[str, Any], timeout: float = 10.0) -> bool:
     # Prepare registration request
     registration_result = {"success": False, "error": None}
     registration_event = threading.Event()
+    # Mutable container so the response handler can correlate the latest request_id.
+    expected_request_id: Dict[str, Optional[str]] = {"value": None}
 
     def handle_response(data: Any) -> None:
         """Handle comms.response for registration."""
@@ -54,6 +56,10 @@ def register_asset(bus, config: Dict[str, Any], timeout: float = 10.0) -> bool:
 
         func_name = data.get("function")
         if func_name != "create_entity":
+            return
+
+        # Correlate by request_id to avoid consuming unrelated responses
+        if data.get("request_id") != expected_request_id["value"]:
             return
 
         if data.get("ok", False):
@@ -99,6 +105,7 @@ def register_asset(bus, config: Dict[str, Any], timeout: float = 10.0) -> bool:
 
             # Publish registration request
             request_id = f"reg-{int(time.time() * 1000)}"
+            expected_request_id["value"] = request_id
             LOGGER.info(
                 "Registering asset: id=%s, type=%s, alias=%s, model=%s",
                 entity_id,

@@ -1,5 +1,6 @@
 import time
 import tempfile
+import threading
 from pathlib import Path
 from framework.bus import MessageBus
 from modules.data_store.manager import DataStoreManager
@@ -321,5 +322,47 @@ def test_data_store_handles_invalid_input():
 
     assert len(response_events) == 1
     assert response_events[0]["keys"] == []
+
+    manager.stop()
+
+
+def test_data_store_concurrent_puts():
+    """Test that concurrent put operations do not lose updates."""
+    config = _base_config({"enabled": True})
+    bus = MessageBus()
+    manager = DataStoreManager(bus, config)
+    manager.start()
+
+    num_threads = 10
+    writes_per_thread = 50
+    barrier = threading.Barrier(num_threads)
+
+    def writer(thread_id):
+        barrier.wait()
+        for i in range(writes_per_thread):
+            bus.publish(
+                "data_store.put",
+                {
+                    "namespace": "concurrent",
+                    "key": f"t{thread_id}-k{i}",
+                    "value": i,
+                },
+            )
+
+    threads = [threading.Thread(target=writer, args=(t,)) for t in range(num_threads)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    time.sleep(0.2)
+
+    response_events = []
+    bus.subscribe("data_store.response", lambda d: response_events.append(d))
+    bus.publish("data_store.list", {"namespace": "concurrent"})
+    time.sleep(0.1)
+
+    assert len(response_events) == 1
+    assert len(response_events[0]["keys"]) == num_threads * writes_per_thread
 
     manager.stop()

@@ -535,7 +535,7 @@ class OperationsManager(ModuleBase):
         self.bus.publish(
             "comms.request",
             {
-                "function": "update_entity_telemetry",
+                "function": "update_telemetry",
                 "args": args,
                 "request_id": f"track-{track_id}-{int(now * 1000)}",
             },

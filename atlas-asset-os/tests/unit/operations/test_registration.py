@@ -22,17 +22,23 @@ def _base_config(asset_cfg: dict) -> dict:
 def _simulate_success_response(bus: MessageBus, delay: float = 0.1):
     """Simulate a successful response from the comms bus."""
 
-    def send_response():
-        time.sleep(delay)
-        bus.publish(
-            "comms.response",
-            {
-                "function": "create_entity",
-                "ok": True,
-            },
-        )
+    def on_request(data):
+        req_id = data.get("request_id") if isinstance(data, dict) else None
 
-    threading.Thread(target=send_response, daemon=True).start()
+        def send_response():
+            time.sleep(delay)
+            bus.publish(
+                "comms.response",
+                {
+                    "function": "create_entity",
+                    "request_id": req_id,
+                    "ok": True,
+                },
+            )
+
+        threading.Thread(target=send_response, daemon=True).start()
+
+    bus.subscribe("comms.request", on_request)
 
 
 def _simulate_error_response(
@@ -40,18 +46,24 @@ def _simulate_error_response(
 ):
     """Simulate an error response from the comms bus."""
 
-    def send_response():
-        time.sleep(delay)
-        bus.publish(
-            "comms.response",
-            {
-                "function": "create_entity",
-                "ok": False,
-                "error": error_msg,
-            },
-        )
+    def on_request(data):
+        req_id = data.get("request_id") if isinstance(data, dict) else None
 
-    threading.Thread(target=send_response, daemon=True).start()
+        def send_response():
+            time.sleep(delay)
+            bus.publish(
+                "comms.response",
+                {
+                    "function": "create_entity",
+                    "request_id": req_id,
+                    "ok": False,
+                    "error": error_msg,
+                },
+            )
+
+        threading.Thread(target=send_response, daemon=True).start()
+
+    bus.subscribe("comms.request", on_request)
 
 
 def test_register_asset_with_valid_asset_type():
@@ -299,3 +311,40 @@ def test_register_asset_validates_allowed_types():
 
         result = register_asset(bus, config, timeout=1.0)
         assert result is False, f"Expected {entity_type} to be rejected"
+
+
+def test_register_asset_ignores_unrelated_request_id():
+    """Test that registration ignores responses with a different request_id."""
+    config = _base_config(
+        {
+            "id": "test-asset-001",
+            "type": "asset",
+            "name": "Test Asset",
+            "model_id": "test-model",
+        }
+    )
+    bus = MessageBus()
+
+    # Send a response with a mismatched request_id
+    def send_wrong_response(data):
+        if not isinstance(data, dict) or data.get("function") != "create_entity":
+            return
+
+        def respond():
+            time.sleep(0.05)
+            bus.publish(
+                "comms.response",
+                {
+                    "function": "create_entity",
+                    "request_id": "wrong-id",
+                    "ok": True,
+                },
+            )
+
+        threading.Thread(target=respond, daemon=True).start()
+
+    bus.subscribe("comms.request", send_wrong_response)
+
+    result = register_asset(bus, config, timeout=0.5)
+    # Should time out because the request_id doesn't match
+    assert result is False

@@ -4,7 +4,7 @@
     "api_token": null,
     "asset": {
       "id": "asset-001",
-      "type": "digital",
+      "type": "asset",
       "name": "ATLAS Asset",
       "model_id": "generic-asset"
     }
