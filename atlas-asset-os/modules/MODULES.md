@@ -150,15 +150,15 @@ Dev-only priority list (not user config):
 ```
 
 **Bus Topics:**
-- Publish `data_store.put` `{namespace, key, value, meta}`
-- Publish `data_store.get` `{namespace, key, request_id}`
-- Publish `data_store.list` `{namespace, request_id}`
-- Publish `data_store.delete` `{namespace, key}`
-- Publish `data_store.snapshot.request` `{namespace?, request_id}`
-- Subscribe `data_store.response` `{namespace, key?, keys?, record?, request_id}`
-- Subscribe `data_store.updated` `{namespace, key, record}`
-- Subscribe `data_store.deleted` `{namespace, key, record}`
-- Subscribe `data_store.snapshot` `{snapshot, request_id}`
+- Subscribe `data_store.put` `{namespace, key, value, meta}`
+- Subscribe `data_store.get` `{namespace, key, request_id}`
+- Subscribe `data_store.list` `{namespace, request_id}`
+- Subscribe `data_store.delete` `{namespace, key}`
+- Subscribe `data_store.snapshot.request` `{namespace?, request_id}`
+- Publish `data_store.response` `{namespace, key?, keys?, record?, request_id}`
+- Publish `data_store.updated` `{namespace, key, record}`
+- Publish `data_store.deleted` `{namespace, key, record}`
+- Publish `data_store.snapshot` `{snapshot, request_id}`
 
 ---
 
@@ -176,4 +176,3 @@ When adding a new module:
 
 ---
 
-*Last updated: 2025-01-14*

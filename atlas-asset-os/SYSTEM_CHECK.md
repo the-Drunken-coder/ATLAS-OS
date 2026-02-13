@@ -1,82 +1,82 @@
-# System Check Implementation for ATLAS Asset OS
+# System Check for ATLAS Asset OS
 
 ## Overview
-This document describes the system check functionality added to the ATLAS Asset OS, which allows modules to report their health status and enables coordinated diagnostics across the entire system.
 
-## Implementation Details
+ATLAS Asset OS supports module health diagnostics through a shared `system_check()` contract.
+Checks can be run directly through `ModuleLoader` or via bus request/response.
 
-### Core Components
+## How It Works
 
-#### 1. ModuleBase Extension
+### Module Base Contract
+
 - **File**: `Atlas_Client_Systems/ATLAS_ASSET_OS/modules/module_base.py`
-- **Change**: Added `system_check()` method
-- **Default Implementation**: Returns `{"healthy": self.running, "status": "running" if self.running else "stopped"}`
-- **Purpose**: Provides a consistent interface for all modules to report their health
+- Every module inherits `system_check()`.
+- Default result is:
+  - `healthy = self.running`
+  - `status = "running"` or `"stopped"`
 
-#### 2. ModuleLoader System Check
+### Aggregation in Module Loader
+
 - **File**: `Atlas_Client_Systems/ATLAS_ASSET_OS/modules/module_loader.py`
-- **Method**: `run_system_check(timeout_s: float = 5.0)`
-- **Features**:
-  - Runs system check on all loaded modules
-  - Executes each check in a separate thread with timeout
-  - Treats timeout or no response as unhealthy
-  - Returns overall health status and per-module diagnostics
-  
-#### 3. OSManager Integration
-- **File**: `Atlas_Client_Systems/ATLAS_ASSET_OS/framework/master.py`
-- **Method**: `_handle_system_check_request(data: Optional[Dict[str, Any]])`
-- **Subscription**: Listens to `module_loader.system_check.request`
-- **Response**: Publishes to `system.check.response`
+- `run_system_check(timeout_s=5.0)`:
+  - runs checks for loaded modules
+  - executes each check in a thread with timeout
+  - marks timeout or invalid response as unhealthy
+  - returns `overall_healthy` and per-module diagnostics
 
-#### 4. Operations Manager
+### Bus Flow
+
 - **File**: `Atlas_Client_Systems/ATLAS_ASSET_OS/modules/operations/manager.py`
-- **Subscription**: Listens to `system.check.request`
-- **Action**: Forwards request to module loader via `module_loader.system_check.request`
-- **Custom Diagnostics**: Reports heartbeat interval, checkin status, registration status, command queue
+  - subscribes to `system.check.request`
+  - forwards request to `module_loader.system_check.request`
+- **File**: `Atlas_Client_Systems/ATLAS_ASSET_OS/framework/master.py`
+  - subscribes to `module_loader.system_check.request`
+  - publishes results on `system.check.response`
 
-### Module-Specific Implementations
+## Module-Specific Diagnostics
 
-#### Comms Module
-Reports:
-- Connection status
-- Active method (wifi/meshtastic)
-- Simulated mode flag
-- Queued requests count
+### `comms`
 
-#### Operations Module
-Reports:
-- Heartbeat interval
-- Checkin interval
-- Registration completion status
-- Active command presence
-- Queued commands count
+- `healthy`, `status`
+- active `method`
+- `simulated`
+- `queued_requests`
 
-#### Sensors Module
-Reports:
-- Worker health status
-- Worker count
-- Individual worker types
-- Overall health based on all workers
+### `operations`
 
-#### Data Store Module
-Reports:
-- Number of namespaces
-- Total record count
-- Persistence enabled flag
+- `healthy`, `status`
+- `heartbeat_interval_s`
+- effective `checkin_interval_s`
+- `registration_complete`
+- `active_command`
+- `queued_commands`
+
+### `sensors`
+
+- `healthy`, `status`
+- per-worker health map in `workers`
+- `worker_count`
+
+### `data_store`
+
+- `healthy`, `status`
+- `namespaces`
+- `total_records`
+- `persistence_enabled`
 
 ## Usage
 
-### Triggering a System Check
+### Trigger a Check
 
 ```python
-# Via bus (from any module)
+# Via bus
 bus.publish("system.check.request", {"request_id": "unique-id"})
 
-# Or directly via module loader
+# Directly
 results = os_manager.module_loader.run_system_check(timeout_s=5.0)
 ```
 
-### Response Format
+### Aggregated Result Shape
 
 ```python
 {
@@ -85,14 +85,14 @@ results = os_manager.module_loader.run_system_check(timeout_s=5.0)
         "module_name": {
             "healthy": bool,
             "status": str,
-            "error": str (if check failed),
-            ...additional module-specific data
+            "error": str,  # optional
+            # module-specific fields...
         }
-    }
+    },
 }
 ```
 
-### Bus Response Format
+### Bus Response Shape
 
 ```python
 {
@@ -101,77 +101,26 @@ results = os_manager.module_loader.run_system_check(timeout_s=5.0)
         "modules": {...}
     },
     "timestamp": float,
-    "request_id": str (if provided in request)
+    "request_id": str,  # present when provided in request
 }
 ```
 
-## Testing
+## Verification
 
-### Test Coverage
-- 8 new comprehensive tests in `Atlas_Client_Systems/ATLAS_ASSET_OS/tests/unit/test_system_check.py`
-- All 107 existing tests continue to pass
-- Tests cover:
-  - Default ModuleBase implementation
-  - Module loader system check
-  - Bus-based request/response
-  - Timeout handling
-  - Individual module implementations
+System check behavior is covered in:
+- `Atlas_Client_Systems/ATLAS_ASSET_OS/tests/unit/test_system_check.py`
 
-### Running Tests
+Run:
 
 ```bash
-# Run system check tests
-cd ATLAS
-python -m pytest Atlas_Client_Systems/ATLAS_ASSET_OS/tests/unit/test_system_check.py -v
-
-# Run all Asset OS tests
-python -m pytest Atlas_Client_Systems/ATLAS_ASSET_OS/tests/unit/ -v
+cd Atlas_Client_Systems/ATLAS_ASSET_OS
+python -m pytest tests/unit/test_system_check.py -v
+python -m pytest tests/ -v
 ```
 
-## Demonstration
-
-A demonstration script is provided at `Atlas_Client_Systems/ATLAS_ASSET_OS/demo_system_check.py`:
+## Demo
 
 ```bash
 cd Atlas_Client_Systems/ATLAS_ASSET_OS
 python demo_system_check.py
 ```
-
-This script shows:
-- Module initialization and startup
-- Direct system check invocation
-- Bus-based system check request
-- Detailed health reporting for all modules
-
-## Key Design Decisions
-
-1. **Timeout Handling**: Each module check runs in a thread with configurable timeout (default 5s)
-2. **No Response = Unhealthy**: If a module doesn't respond or times out, it's marked as unhealthy
-3. **Optional Override**: Modules can override `system_check()` or use the default implementation
-4. **Bus-Based**: Uses the existing message bus pattern for consistency
-5. **Non-Blocking**: System checks run in separate threads to avoid blocking operations
-6. **Comprehensive Info**: Each module provides custom diagnostics relevant to its function
-
-## Future Enhancements
-
-Potential improvements (not implemented in this PR):
-- Periodic automatic system checks
-- Historical health tracking
-- Alert thresholds and notifications
-- Integration with Atlas Command for remote monitoring
-- Health check metrics export
-
-## Files Modified
-
-1. `Atlas_Client_Systems/ATLAS_ASSET_OS/modules/module_base.py` - Added system_check method
-2. `Atlas_Client_Systems/ATLAS_ASSET_OS/modules/module_loader.py` - Added run_system_check method
-3. `Atlas_Client_Systems/ATLAS_ASSET_OS/framework/master.py` - Added system check request handler
-4. `Atlas_Client_Systems/ATLAS_ASSET_OS/modules/operations/manager.py` - Added system check implementation and request handling
-5. `Atlas_Client_Systems/ATLAS_ASSET_OS/modules/comms/manager.py` - Added system check implementation
-6. `Atlas_Client_Systems/ATLAS_ASSET_OS/modules/sensors/manager.py` - Added system check implementation
-7. `Atlas_Client_Systems/ATLAS_ASSET_OS/modules/data_store/manager.py` - Added system check implementation
-
-## Files Added
-
-1. `Atlas_Client_Systems/ATLAS_ASSET_OS/tests/unit/test_system_check.py` - Comprehensive tests
-2. `Atlas_Client_Systems/ATLAS_ASSET_OS/demo_system_check.py` - Demonstration script
