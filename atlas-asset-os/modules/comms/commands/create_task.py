@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
+from atlas_asset_http_client_python.components import TaskComponents
 from modules.comms.types import MeshtasticClient
 
 
@@ -11,7 +12,7 @@ def create_task(
     *,
     status: Optional[str] = None,
     entity_id: Optional[str] = None,
-    components: Optional[Dict[str, Any]] = None,
+    components: Optional[TaskComponents] = None,
     extra: Optional[Any] = None,
     timeout: float | None = None,
     retries: int | None = None,

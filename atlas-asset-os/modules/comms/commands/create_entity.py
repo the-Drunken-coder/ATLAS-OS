@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, Dict, Optional
+from typing import Optional
 
+from atlas_asset_http_client_python.components import EntityComponents
 from modules.comms.types import MeshtasticClient
 
 
@@ -12,7 +13,7 @@ def create_entity(
     alias: str,
     subtype: str,
     *,
-    components: Optional[Dict[str, Any]] = None,
+    components: Optional[EntityComponents] = None,
     timeout: float | None = None,
     retries: int | None = None,
 ):
