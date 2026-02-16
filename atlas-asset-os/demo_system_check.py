@@ -56,13 +56,13 @@ def main():
     # Discover and start modules
     print("Discovering modules...")
     os_manager.module_loader.discover_modules()
-    
+
     print("Resolving dependencies...")
     os_manager.module_loader.resolve_dependencies()
-    
+
     print("Loading modules...")
     os_manager.module_loader.load_modules()
-    
+
     print("Starting modules...")
     os_manager.module_loader.start_modules()
 
@@ -91,9 +91,9 @@ def main():
         healthy = module_result.get("healthy", False)
         status = module_result.get("status", "unknown")
         health_icon = "✓" if healthy else "✗"
-        
+
         print(f"  {health_icon} {module_name:15s} - {status}")
-        
+
         # Print additional diagnostic info
         for key, value in module_result.items():
             if key not in {"healthy", "status"}:
