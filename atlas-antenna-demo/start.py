@@ -126,7 +126,7 @@ def main():
 
     gps = GpsReader(cfg["gps"])
     antenna = AntennaReader(cfg["antenna"])
-    comms = CommsClient(cfg["comms"], cfg["asset"])
+    comms = CommsClient(cfg["comms"], cfg["asset"], cfg.get("radio"))
 
     gps.start()
     comms.connect()

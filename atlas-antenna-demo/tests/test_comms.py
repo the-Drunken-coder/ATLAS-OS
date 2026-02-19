@@ -2,9 +2,12 @@
 
 import sys
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+import comms as comms_module
 from comms import CommsClient
 
 
@@ -67,3 +70,47 @@ def test_close_simulated():
     c.close()  # should not raise
     assert c._client is None
     assert c._loop is None
+
+
+def test_radio_checkin_returns_new_tasks(monkeypatch):
+    mock_meshtastic_client = MagicMock()
+    mock_meshtastic_client.health_check.return_value = SimpleNamespace(
+        type="response",
+        data={"result": {"status": "ok"}},
+    )
+    mock_meshtastic_client.checkin_entity.return_value = SimpleNamespace(
+        type="response",
+        data={
+            "result": {
+                "tasks": [
+                    {"task_id": "task-001"},
+                    {"task_id": "task-001"},
+                    {"task_id": "task-002"},
+                ]
+            }
+        },
+    )
+
+    monkeypatch.setattr(comms_module, "_HAS_MESHTASTIC_BRIDGE", True)
+    monkeypatch.setattr(comms_module, "load_mode_profile", lambda _: {})
+    monkeypatch.setattr(comms_module, "strategy_from_name", lambda _: None)
+    monkeypatch.setattr(comms_module, "build_radio", lambda *_args: object())
+    monkeypatch.setattr(comms_module, "MeshtasticTransport", lambda *_args, **_kwargs: MagicMock())
+    monkeypatch.setattr(
+        comms_module,
+        "MeshtasticClient",
+        lambda *_args, **_kwargs: mock_meshtastic_client,
+    )
+
+    comms_cfg = {"use_radio": True, "simulated": False}
+    radio_cfg = {
+        "simulated": True,
+        "gateway_node_id": "gw-1",
+        "timeout_s": 5,
+        "max_retries": 1,
+    }
+    client = CommsClient(comms_cfg, ASSET, radio_cfg)
+    client.connect()
+
+    tasks = client.checkin({"latitude": 34.0, "longitude": -118.0, "heading_deg": 45.0})
+    assert [task["task_id"] for task in tasks] == ["task-001", "task-002"]

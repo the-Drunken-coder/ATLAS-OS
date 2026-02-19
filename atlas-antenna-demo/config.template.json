@@ -6,9 +6,21 @@
         "model_id": "sensor"
     },
     "comms": {
+        "use_radio": false,
         "simulated": false,
         "base_url": "https://atlascommandapi.org",
-        "api_token": null
+        "api_token": null,
+        "timeout_s": 10
+    },
+    "radio": {
+        "simulated": false,
+        "gateway_node_id": "gateway",
+        "radio_port": null,
+        "node_id": "antenna-demo-001",
+        "mode": "general",
+        "spool_path": "~/.atlas_meshtastic_spool_antenna_demo.json",
+        "timeout_s": 15,
+        "max_retries": 2
     },
     "gps": {
         "simulated": true,
