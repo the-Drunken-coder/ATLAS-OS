@@ -1,0 +1,33 @@
+{
+    "asset": {
+        "id": "antenna-demo-001",
+        "name": "ATLAS Antenna Demo",
+        "type": "asset",
+        "model_id": "sensor"
+    },
+    "comms": {
+        "simulated": false,
+        "base_url": "https://atlascommandapi.org",
+        "api_token": null
+    },
+    "gps": {
+        "simulated": true,
+        "serial_port": "/dev/ttyUSB0",
+        "baud_rate": 9600,
+        "interval_s": 1.0,
+        "sim_start_lat": 42.2751775900907,
+        "sim_start_lon": -71.8069005071065,
+        "sim_heading_deg": 45.0,
+        "sim_speed_m_s": 0.0
+    },
+    "antenna": {
+        "simulated": true,
+        "serial_port": "/dev/ttyUSB1",
+        "baud_rate": 115200,
+        "sim_signal_range": [-80, -40]
+    },
+    "checkin_interval_s": 15,
+    "track_offset_m": 12.192,
+    "track_subtype": "signal",
+    "track_alias_prefix": "sig-track"
+}
