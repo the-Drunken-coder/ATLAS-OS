@@ -404,7 +404,7 @@ def load_config():
 
 
 def _discover_radio_port() -> Optional[str]:
-    """Best-effort radio port discovery using meshtastic util or pyserial."""
+    """Find a serial port that actually responds as a Meshtastic radio."""
     ports = []
     if meshtastic_util:
         try:
@@ -416,16 +416,24 @@ def _discover_radio_port() -> Optional[str]:
             ports = [p.device for p in list_ports.comports()]
         except Exception as exc:  # pragma: no cover - hardware specific
             logging.warning("pyserial port discovery failed: %s", exc)
-    if not ports:
+    normalized_ports = []
+    for entry in ports:
+        if isinstance(entry, dict) and "device" in entry:
+            normalized_ports.append(str(entry["device"]))
+        else:
+            normalized_ports.append(str(entry))
+
+    if not normalized_ports:
         return None
-    # Normalize potential dict entries from meshtastic util
-    first = ports[0]
-    if isinstance(first, dict) and "device" in first:
-        return str(first["device"])
-    return str(first)
+
+    # Probe each discovered serial port and only accept one that returns a node ID.
+    for candidate in normalized_ports:
+        if _read_radio_node_id(candidate, log_errors=False):
+            return candidate
+    return None
 
 
-def _read_radio_node_id(port: str) -> Optional[str]:
+def _read_radio_node_id(port: str, log_errors: bool = True) -> Optional[str]:
     """Attempt to read the radio's existing node/user ID."""
     if serial_interface is None:
         return None
@@ -437,7 +445,8 @@ def _read_radio_node_id(port: str) -> Optional[str]:
         node_id = user.get("id") if isinstance(user, dict) else None
         return str(node_id) if node_id else None
     except Exception as exc:  # pragma: no cover - hardware specific
-        logging.warning("Could not read node ID from radio on %s: %s", port, exc)
+        if log_errors:
+            logging.warning("Could not read node ID from radio on %s: %s", port, exc)
         return None
 
 

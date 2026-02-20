@@ -1,4 +1,5 @@
 atlas-asset-client>=0.3.0
+atlas-meshtastic-bridge[meshtastic]>=0.1.19
 msgpack>=1.0.7
 zstandard>=0.22.0
 meshtastic>=2.3.0
