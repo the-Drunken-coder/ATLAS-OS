@@ -39,7 +39,7 @@ from .create_task import create_task  # noqa: E402
 from .update_task import update_task  # noqa: E402
 from .delete_task import delete_task  # noqa: E402
 from .transition_task_status import transition_task_status  # noqa: E402
-from .start_task import start_task  # noqa: E402
+from .acknowledge_task import acknowledge_task  # noqa: E402
 from .complete_task import complete_task  # noqa: E402
 from .fail_task import fail_task  # noqa: E402
 from .list_objects import list_objects  # noqa: E402
@@ -76,7 +76,7 @@ FUNCTION_REGISTRY = {
     "update_task": update_task,
     "delete_task": delete_task,
     "transition_task_status": transition_task_status,
-    "start_task": start_task,
+    "acknowledge_task": acknowledge_task,
     "complete_task": complete_task,
     "fail_task": fail_task,
     "list_objects": list_objects,

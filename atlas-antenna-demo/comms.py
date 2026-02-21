@@ -190,16 +190,16 @@ class CommsClient:
     def create_entity(self, **kwargs):
         return self._create_entity(**kwargs)
 
-    def start_task(self, task_id):
+    def acknowledge_task(self, task_id):
         if self._simulated:
-            log.info("[SIM] start_task %s", task_id)
+            log.info("[SIM] acknowledge_task %s", task_id)
             return {}
         if self._use_radio:
-            return self._radio_request("start_task", task_id=task_id)
+            return self._radio_request("acknowledge_task", task_id=task_id)
         try:
-            return self._run(self._client.start_task(task_id))
+            return self._run(self._client.acknowledge_task(task_id))
         except Exception as exc:
-            log.error("Start task failed: %s", exc)
+            log.error("Acknowledge task failed: %s", exc)
             return None
 
     def complete_task(self, task_id, result=None):

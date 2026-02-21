@@ -142,7 +142,7 @@ class OperationsManager(ModuleBase):
                             "function": "checkin_entity",
                             "args": {
                                 "entity_id": entity_id,
-                                "status_filter": "pending,in_progress",
+                                "status_filter": "pending,acknowledged",
                                 **self._checkin_payload,
                             },
                             "request_id": f"checkin-{int(now * 1000)}",
@@ -310,7 +310,7 @@ class OperationsManager(ModuleBase):
         if not task_id:
             return
         status = str(task.get("status", "pending")).lower()
-        if status not in {"pending", "in_progress"}:
+        if status not in {"pending", "acknowledged"}:
             return
         task_id = str(task_id)
         if task_id in self._known_task_ids:
@@ -361,7 +361,7 @@ class OperationsManager(ModuleBase):
                     "task_id": task_id,
                     "command": command,
                     "parameters": parameters,
-                    "skip_start": status == "in_progress",
+                    "skip_acknowledgment": status == "acknowledged",
                 }
             )
 
@@ -392,10 +392,10 @@ class OperationsManager(ModuleBase):
                 task_id, success=False, error="No handler registered"
             )
             return
-        if not task.get("skip_start"):
+        if not task.get("skip_acknowledgment"):
             self.bus.publish(
                 "comms.request",
-                {"function": "start_task", "args": {"task_id": task_id}},
+                {"function": "acknowledge_task", "args": {"task_id": task_id}},
             )
         try:
             result = handler(parameters)

@@ -40,7 +40,7 @@ def handle_task(task, gps, antenna, comms, cfg):
                or task_id
 
     if command == "get_signal_strength":
-        comms.start_task(task_id)
+        comms.acknowledge_task(task_id)
         try:
             result = do_get_signal_strength(gps, antenna, comms, cfg)
             comms.complete_task(task_id, result)

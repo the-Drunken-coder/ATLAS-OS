@@ -329,7 +329,7 @@ def test_task_handling_enqueue_and_execute():
     assert executed_tasks[0]["param1"] == "value1"
 
     # Verify comms requests were made
-    start_requests = [r for r in comms_requests if r.get("function") == "start_task"]
+    start_requests = [r for r in comms_requests if r.get("function") == "acknowledge_task"]
     complete_requests = [
         r for r in comms_requests if r.get("function") == "complete_task"
     ]

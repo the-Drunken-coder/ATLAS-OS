@@ -50,9 +50,9 @@ def test_create_entity_simulated():
     assert result == {}
 
 
-def test_start_task_simulated():
+def test_acknowledge_task_simulated():
     c = _make_client()
-    assert c.start_task("task-001") == {}
+    assert c.acknowledge_task("task-001") == {}
 
 
 def test_complete_task_simulated():

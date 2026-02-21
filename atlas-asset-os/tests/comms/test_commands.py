@@ -432,23 +432,23 @@ class TestTaskCommands:
             task_id="task-1", status="running", timeout=5.0, max_retries=2
         )
 
-    def test_start_task_raises_when_client_none(self):
-        """Test start_task raises RuntimeError when client is None."""
-        from modules.comms.commands.start_task import start_task
+    def test_acknowledge_task_raises_when_client_none(self):
+        """Test acknowledge_task raises RuntimeError when client is None."""
+        from modules.comms.commands.acknowledge_task import acknowledge_task
 
         with pytest.raises(RuntimeError, match="not initialized"):
-            start_task(None, "task-1")
+            acknowledge_task(None, "task-1")
 
-    def test_start_task_calls_client(self):
-        """Test start_task calls client with correct args."""
-        from modules.comms.commands.start_task import start_task
+    def test_acknowledge_task_calls_client(self):
+        """Test acknowledge_task calls client with correct args."""
+        from modules.comms.commands.acknowledge_task import acknowledge_task
 
         client = MagicMock()
-        client.start_task.return_value = {"id": "task-1", "status": "running"}
+        client.acknowledge_task.return_value = {"id": "task-1", "status": "running"}
 
-        start_task(client, "task-1", timeout=5.0, retries=2)
+        acknowledge_task(client, "task-1", timeout=5.0, retries=2)
 
-        client.start_task.assert_called_once_with(
+        client.acknowledge_task.assert_called_once_with(
             task_id="task-1", timeout=5.0, max_retries=2
         )
 
@@ -850,7 +850,7 @@ class TestFunctionRegistry:
             "update_task",
             "delete_task",
             "transition_task_status",
-            "start_task",
+            "acknowledge_task",
             "complete_task",
             "fail_task",
             "list_objects",

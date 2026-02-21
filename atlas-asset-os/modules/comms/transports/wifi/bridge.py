@@ -501,7 +501,7 @@ class WifiApiClient:
             "update_task",
             "delete_task",
             "get_tasks_by_entity",
-            "start_task",
+            "acknowledge_task",
             "complete_task",
             "transition_task_status",
             "fail_task",
