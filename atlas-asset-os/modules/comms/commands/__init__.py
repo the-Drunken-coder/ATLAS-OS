@@ -8,9 +8,9 @@ from functools import lru_cache
 from types import ModuleType
 from typing import Any, Callable
 
-_log = logging.getLogger(__name__)
-
 from atlas_meshtastic_bridge.client import MeshtasticClient
+
+_log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
