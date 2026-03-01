@@ -13,6 +13,8 @@ for path_dir in (ASSET_OS_ROOT, FRAMEWORK_DIR, MODULES_DIR):
     if path_dir.exists() and str(path_dir) not in sys.path:
         sys.path.insert(0, str(path_dir))
 
+MOCK_API_TOKEN = "mock-token-for-testing"
+
 
 def pytest_addoption(parser):
     """Expose command-line overrides for BasePlate Atlas API tests."""

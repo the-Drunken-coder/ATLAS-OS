@@ -4,6 +4,8 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+from tests.conftest import MOCK_API_TOKEN
+
 
 class TestWifiBridgeHelpers:
     """Tests for WiFi bridge helper functions."""
@@ -276,10 +278,10 @@ class TestWifiApiClient:
         """Test WifiApiClient initialization."""
         from modules.comms.transports.wifi.bridge import WifiApiClient
 
-        client = WifiApiClient("http://localhost:8000", token="test-token", timeout=30.0)
+        client = WifiApiClient("http://localhost:8000", token=MOCK_API_TOKEN, timeout=30.0)
 
         assert client._base_url == "http://localhost:8000"
-        assert client._token == "test-token"
+        assert client._token == MOCK_API_TOKEN
         assert client._timeout == 30.0
 
     def test_wifi_api_client_strips_trailing_slash(self):

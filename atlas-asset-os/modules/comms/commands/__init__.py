@@ -2,16 +2,11 @@ import sys
 from pathlib import Path
 
 
-def _find_repo_root(start: Path) -> Path:
-    """Walk up parents to locate the repo root (directory containing .git)."""
-    for ancestor in [start] + list(start.parents):
-        if (ancestor / ".git").exists():
-            return ancestor
-    return start
-
-
 # Ensure local Meshtastic bridge source is importable for command wrappers.
-_ROOT = _find_repo_root(Path(__file__).resolve().parent)
+# File path:
+#   Atlas_Client_Systems/ATLAS_ASSET_OS/modules/comms/commands/__init__.py
+# Repo root is 5 levels up from this file.
+_ROOT = Path(__file__).resolve().parents[5]
 _BRIDGE_SRC = (
     _ROOT
     / "Atlas_Client_SDKs"
@@ -19,7 +14,7 @@ _BRIDGE_SRC = (
     / "atlas_meshtastic_bridge"
     / "src"
 )
-if str(_BRIDGE_SRC) not in sys.path:
+if _BRIDGE_SRC.exists() and str(_BRIDGE_SRC) not in sys.path:
     sys.path.insert(0, str(_BRIDGE_SRC))
 
 from .echo import echo as test_echo  # noqa: E402

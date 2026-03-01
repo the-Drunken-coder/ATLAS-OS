@@ -12,17 +12,13 @@ import threading
 # And the source code is in Atlas_Client_SDKs/connection_packages/...
 
 CURRENT_DIR = Path(__file__).resolve().parent
-
-
-def find_repo_root(start: Path) -> Path:
-    """Walk up parents to find the repo root (directory containing .git)."""
-    for ancestor in [start] + list(start.parents):
-        if (ancestor / ".git").exists():
-            return ancestor
-    return start
-
-
-REPO_ROOT = find_repo_root(CURRENT_DIR)
+# File path:
+#   Atlas_Client_Systems/Atlas_Tool_OSs/Gateway_OS/master.py
+# Repo root is 3 levels up from this file.
+REPO_ROOT = CURRENT_DIR.parents[3]
+if not (REPO_ROOT / "Atlas_Client_SDKs").exists():
+    logging.error("Could not resolve repository root from %s", CURRENT_DIR)
+    sys.exit(1)
 
 # Paths to the local packages
 BRIDGE_SRC = (
