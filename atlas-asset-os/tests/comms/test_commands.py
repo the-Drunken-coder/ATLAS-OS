@@ -87,6 +87,16 @@ class TestEntityCommands:
         client.list_entities.assert_called_once_with(timeout=5.0, max_retries=2)
         assert result == [{"id": "entity-1"}]
 
+    def test_list_entities_accepts_legacy_positional_limit_offset(self):
+        from modules.comms.commands.list_entities import list_entities
+
+        client = MagicMock()
+        list_entities(client, 5, 10, timeout=3.0, retries=1)
+
+        client.list_entities.assert_called_once_with(
+            limit=5, offset=10, timeout=3.0, max_retries=1
+        )
+
     def test_get_entity_raises_when_client_none(self):
         """Test get_entity raises RuntimeError when client is None."""
         from modules.comms.commands.get_entity import get_entity
@@ -291,6 +301,16 @@ class TestTaskCommands:
 
         client.list_tasks.assert_called_once_with(timeout=5.0, max_retries=2)
         assert result == [{"id": "task-1"}]
+
+    def test_list_tasks_accepts_legacy_positional_status_limit(self):
+        from modules.comms.commands.list_tasks import list_tasks
+
+        client = MagicMock()
+        list_tasks(client, "pending", 25, timeout=3.0, retries=1)
+
+        client.list_tasks.assert_called_once_with(
+            status="pending", limit=25, timeout=3.0, max_retries=1
+        )
 
     def test_get_task_raises_when_client_none(self):
         """Test get_task raises RuntimeError when client is None."""
@@ -625,6 +645,36 @@ class TestObjectCommands:
             entity_id="entity-1", timeout=5.0, max_retries=2
         )
 
+    def test_get_objects_by_entity_forwards_offset_when_supported(self):
+        from modules.comms.commands.get_objects_by_entity import get_objects_by_entity
+
+        class ClientWithOffset:
+            def __init__(self):
+                self.called_with = {}
+
+            def get_objects_by_entity(
+                self,
+                *,
+                entity_id: str,
+                limit: int | None = None,
+                offset: int | None = None,
+                timeout: float | None = None,
+                max_retries: int | None = None,
+            ):
+                self.called_with = {
+                    "entity_id": entity_id,
+                    "limit": limit,
+                    "offset": offset,
+                    "timeout": timeout,
+                    "max_retries": max_retries,
+                }
+                return []
+
+        client = ClientWithOffset()
+        get_objects_by_entity(client, "entity-1", offset=4, timeout=5.0, retries=2)
+
+        assert client.called_with["offset"] == 4
+
     def test_get_objects_by_task_raises_when_client_none(self):
         """Test get_objects_by_task raises RuntimeError when client is None."""
         from modules.comms.commands.get_objects_by_task import get_objects_by_task
@@ -644,6 +694,34 @@ class TestObjectCommands:
         client.get_objects_by_task.assert_called_once_with(
             task_id="task-1", timeout=5.0, max_retries=2
         )
+
+    def test_get_objects_by_task_ignores_offset_when_unsupported(self):
+        from modules.comms.commands.get_objects_by_task import get_objects_by_task
+
+        class ClientWithoutOffset:
+            def __init__(self):
+                self.called_with = {}
+
+            def get_objects_by_task(
+                self,
+                *,
+                task_id: str,
+                limit: int | None = None,
+                timeout: float | None = None,
+                max_retries: int | None = None,
+            ):
+                self.called_with = {
+                    "task_id": task_id,
+                    "limit": limit,
+                    "timeout": timeout,
+                    "max_retries": max_retries,
+                }
+                return []
+
+        client = ClientWithoutOffset()
+        get_objects_by_task(client, "task-1", offset=4, timeout=5.0, retries=2)
+
+        assert "offset" not in client.called_with
 
 
 class TestObjectReferenceCommands:
@@ -803,7 +881,7 @@ class TestDatasetCommands:
         get_changed_since(client, "2024-01-01T00:00:00Z", timeout=5.0, retries=2)
 
         client.get_changed_since.assert_called_once_with(
-            timestamp="2024-01-01T00:00:00Z", timeout=5.0, max_retries=2
+            since="2024-01-01T00:00:00Z", timeout=5.0, max_retries=2
         )
 
     def test_get_full_dataset_raises_when_client_none(self):
