@@ -5,26 +5,12 @@ import inspect
 import logging
 import sys
 from functools import lru_cache
-from pathlib import Path
 from types import ModuleType
 from typing import Any, Callable
 
 _log = logging.getLogger(__name__)
 
-# Ensure local Meshtastic bridge source is importable for command wrappers.
-# Repo root is 5 levels up from this file.
-_ROOT = Path(__file__).resolve().parents[5]
-_BRIDGE_SRC = (
-    _ROOT
-    / "Atlas_Client_SDKs"
-    / "connection_packages"
-    / "atlas_meshtastic_bridge"
-    / "src"
-)
-if _BRIDGE_SRC.exists() and str(_BRIDGE_SRC) not in sys.path:
-    sys.path.insert(0, str(_BRIDGE_SRC))
-
-from atlas_meshtastic_bridge.client import MeshtasticClient  # noqa: E402
+from atlas_meshtastic_bridge.client import MeshtasticClient
 
 
 # ---------------------------------------------------------------------------

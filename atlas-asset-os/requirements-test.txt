@@ -1,4 +1,4 @@
 # Dependencies required to run ATLAS_ASSET_OS tests.
-# Installs the in-repo Meshtastic bridge (brings msgpack/zstandard) plus pytest.
--e ../../Atlas_Client_SDKs/connection_packages/atlas_meshtastic_bridge
+# Runtime dependencies are defined in requirements.txt.
+-r requirements.txt
 pytest>=7.0.0

@@ -1,0 +1,2 @@
+# Runtime dependencies required by ATLAS_ASSET_OS.
+-e ../../Atlas_Client_SDKs/connection_packages/atlas_meshtastic_bridge
