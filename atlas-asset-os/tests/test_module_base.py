@@ -1,23 +1,20 @@
 """Tests for the ModuleBase class."""
 
+import logging
+from abc import ABC
 from unittest.mock import MagicMock
+
 import pytest
 
+from modules.module_base import ModuleBase
 
-class ConcreteModule:
-    """Concrete implementation of ModuleBase for testing."""
+
+class ConcreteModule(ModuleBase):
+    """Concrete ModuleBase subclass used to exercise real base behavior."""
 
     MODULE_NAME = "test_module"
     MODULE_VERSION = "1.2.3"
     DEPENDENCIES = ["dep1", "dep2"]
-
-    def __init__(self, bus, config):
-
-        # Copy ModuleBase behavior
-        self.bus = bus
-        self.config = config
-        self.running = False
-        self._logger = MagicMock()
 
     def start(self):
         self.running = True
@@ -25,27 +22,12 @@ class ConcreteModule:
     def stop(self):
         self.running = False
 
-    def get_module_config(self):
-        return self.config.get("modules", {}).get(self.MODULE_NAME, {})
-
-    def is_enabled(self):
-        module_cfg = self.get_module_config()
-        return module_cfg.get("enabled", True)
-
-    def system_check(self):
-        return {
-            "healthy": self.running,
-            "status": "running" if self.running else "stopped",
-        }
-
 
 class TestModuleBaseAttributes:
     """Tests for ModuleBase class attributes."""
 
     def test_module_base_default_attributes(self):
         """Test ModuleBase has correct default attributes."""
-        from modules.module_base import ModuleBase
-
         assert hasattr(ModuleBase, "MODULE_NAME")
         assert hasattr(ModuleBase, "MODULE_VERSION")
         assert hasattr(ModuleBase, "DEPENDENCIES")
@@ -208,9 +190,7 @@ class TestModuleBaseRepr:
 
     def test_repr_format(self):
         """Test ModuleBase __repr__ returns expected format."""
-        from modules.module_base import ModuleBase
 
-        # Create a concrete subclass with proper __repr__
         class TestModule(ModuleBase):
             MODULE_NAME = "my_module"
             MODULE_VERSION = "2.0.0"
@@ -237,13 +217,10 @@ class TestModuleBaseDependencies:
 
     def test_dependencies_default_empty(self):
         """Test DEPENDENCIES defaults to empty list."""
-        from modules.module_base import ModuleBase
-
         assert ModuleBase.DEPENDENCIES == []
 
     def test_dependencies_can_be_overridden(self):
         """Test DEPENDENCIES can be overridden in subclass."""
-        from modules.module_base import ModuleBase
 
         class DependentModule(ModuleBase):
             MODULE_NAME = "dependent"
@@ -264,15 +241,10 @@ class TestModuleBaseAbstract:
 
     def test_module_base_is_abstract(self):
         """Test ModuleBase is abstract and cannot be instantiated directly."""
-        from modules.module_base import ModuleBase
-        from abc import ABC
-
-        # ModuleBase should be a subclass of ABC
         assert issubclass(ModuleBase, ABC)
 
     def test_subclass_must_implement_start(self):
         """Test subclass must implement start method."""
-        from modules.module_base import ModuleBase
 
         class IncompleteModule(ModuleBase):
             MODULE_NAME = "incomplete"
@@ -281,18 +253,14 @@ class TestModuleBaseAbstract:
             def stop(self):
                 pass
 
-            # Missing start method
-
         bus = MagicMock()
         config = {}
 
-        # Should raise TypeError because start is not implemented
         with pytest.raises(TypeError):
             IncompleteModule(bus, config)
 
     def test_subclass_must_implement_stop(self):
         """Test subclass must implement stop method."""
-        from modules.module_base import ModuleBase
 
         class IncompleteModule(ModuleBase):
             MODULE_NAME = "incomplete"
@@ -301,12 +269,9 @@ class TestModuleBaseAbstract:
             def start(self):
                 pass
 
-            # Missing stop method
-
         bus = MagicMock()
         config = {}
 
-        # Should raise TypeError because stop is not implemented
         with pytest.raises(TypeError):
             IncompleteModule(bus, config)
 
@@ -316,8 +281,6 @@ class TestModuleBaseLogging:
 
     def test_module_creates_logger(self):
         """Test module creates logger with correct name."""
-        from modules.module_base import ModuleBase
-        import logging
 
         class LoggingModule(ModuleBase):
             MODULE_NAME = "logging_test"
