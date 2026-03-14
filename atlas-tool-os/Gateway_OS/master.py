@@ -201,7 +201,7 @@ _message_logger: Optional[MessageLogger] = None
 def _patch_transport_for_logging():
     """Patch the MeshtasticTransport class to add message and chunk-level logging."""
     try:
-        from atlas_meshtastic_bridge.transport import MeshtasticTransport, RadioInterface
+        from atlas_meshtastic_bridge.transport import MeshtasticTransport
         from atlas_meshtastic_bridge.message import MessageEnvelope, chunk_envelope
         
         # Store original methods
@@ -232,12 +232,7 @@ def _patch_transport_for_logging():
         
         def logged_receive_message(self, timeout: float = 0.5):
             """Wrapped receive_message that logs chunks and complete messages."""
-            # Track chunks received for this call
-            chunks_received_count = {}
-            
-            # We need to intercept chunk receives, so we'll wrap the radio receive
-            # But chunks are already logged by the radio wrapper, so we just need to
-            # track completion here
+            # Chunks are logged by the radio wrapper; we track message completion here
             result = original_receive(self, timeout)
             if _message_logger and result[0] is not None and result[1] is not None:
                 sender, envelope = result
@@ -322,9 +317,7 @@ def _patch_transport_for_logging():
         
         # Also patch the radio interface to log chunk receives
         # We need to wrap the radio's receive method
-        original_radio_receive = None
-        original_radio_send = None
-        
+
         def wrap_radio(radio_instance):
             """Wrap a radio instance to log chunk receives."""
             if hasattr(radio_instance, '_wrapped_for_logging'):
@@ -345,9 +338,9 @@ def _patch_transport_for_logging():
                             chunk_id, chunk_seq, chunk_total, len(payload), destination
                         )
                 except (ValueError, IndexError, ImportError):
-                    pass  # Not a valid chunk or module unavailable, skip logging
+                    logging.debug("Could not parse chunk header for send logging (non-chunk message or module unavailable)")
                 return original_send(destination, payload)
-            
+
             def logged_radio_receive(timeout: float):
                 """Log radio receives (chunks)."""
                 result = original_receive(timeout)
@@ -361,7 +354,7 @@ def _patch_transport_for_logging():
                                 chunk_id, chunk_seq, chunk_total, len(payload), sender
                             )
                     except (ValueError, IndexError, ImportError):
-                        pass  # Not a valid chunk or module unavailable, skip logging
+                        logging.debug("Could not parse chunk header for receive logging (non-chunk message or module unavailable)")
                 return result
             
             radio_instance.send = logged_radio_send

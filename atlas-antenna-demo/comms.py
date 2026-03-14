@@ -112,8 +112,8 @@ class CommsClient:
         if self._client:
             try:
                 self._run(self._client.aclose())
-            except Exception:
-                pass
+            except Exception as exc:
+                log.debug("Error closing HTTP client during cleanup: %s", exc)
             self._client = None
         if self._loop:
             self._loop.close()
@@ -121,8 +121,8 @@ class CommsClient:
         if self._radio_transport:
             try:
                 self._radio_transport.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                log.debug("Error closing radio transport during cleanup: %s", exc)
             self._radio_transport = None
         self._radio_client = None
 
