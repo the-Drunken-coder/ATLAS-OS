@@ -5,7 +5,7 @@ import shlex
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Optional
 
 try:
     import httpx
@@ -223,32 +223,6 @@ def get_current_ssid(interface: Optional[str]) -> Optional[str]:
 
 
 BAD_SSIDS: set[str] = set()
-
-
-def _try_connect_networks(
-    networks: Iterable[Dict[str, str]], interface: Optional[str]
-) -> bool:
-    platform = sys.platform
-    for entry in networks:
-        ssid = (entry.get("ssid") or "").strip()
-        password = (entry.get("password") or "").strip() or None
-        if not ssid:
-            continue
-
-        LOGGER.info("Trying WiFi network: %s", ssid)
-        if platform.startswith("win"):
-            if _connect_with_windows(ssid, interface):
-                return True
-        elif platform.startswith("linux"):
-            if _connect_with_nmcli(ssid, password):
-                return True
-        elif platform == "darwin":
-            if _connect_with_networksetup(ssid, password, interface):
-                return True
-        else:
-            LOGGER.warning("WiFi connect not supported on platform %s", platform)
-            return False
-    return False
 
 
 def _disconnect_windows() -> None:
