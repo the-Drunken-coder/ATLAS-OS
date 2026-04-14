@@ -12,11 +12,18 @@ import threading
 # And the source code is in Atlas_Client_SDKs/connection_packages/...
 
 CURRENT_DIR = Path(__file__).resolve().parent
-# File path:
-#   Atlas_Client_Systems/Atlas_Tool_OSs/Gateway_OS/master.py
-# Repo root is 3 levels up from this file.
-REPO_ROOT = CURRENT_DIR.parents[3]
-if not (REPO_ROOT / "Atlas_Client_SDKs").exists():
+
+
+def _resolve_repo_root(start_dir: Path) -> Optional[Path]:
+    """Walk upward until we find the ATLAS repo root markers."""
+    for candidate in (start_dir, *start_dir.parents):
+        if (candidate / ".git").exists() and (candidate / "Atlas_Client_SDKs").exists():
+            return candidate
+    return None
+
+
+REPO_ROOT = _resolve_repo_root(CURRENT_DIR)
+if REPO_ROOT is None:
     logging.error("Could not resolve repository root from %s", CURRENT_DIR)
     sys.exit(1)
 
@@ -541,7 +548,9 @@ def run():
         logging.info("Using reliability method from mode: %s", mode_rel)
 
     # Apply modem preset if provided
-    modem_preset = profile.get("modem_preset") if isinstance(profile, dict) else None
+    modem_preset = config.get("modem_preset") or (
+        profile.get("modem_preset") if isinstance(profile, dict) else None
+    )
     if modem_preset and config.get("radio_port"):
         _apply_modem_preset(modem_preset, config["radio_port"], config.get("simulate_radio"))
 

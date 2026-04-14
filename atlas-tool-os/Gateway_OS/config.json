@@ -3,5 +3,6 @@
     "api_token": null,
     "simulate_radio": false,
     "mode": "general",
+    "modem_preset": "SHORT_FAST",
     "enable_message_logging": true
 }
